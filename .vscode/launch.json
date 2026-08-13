@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:ipbar}",
+            "name": "Debug IPBar",
+            "target": "IPBar",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug IPBar"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:ipbar}",
+            "name": "Release IPBar",
+            "target": "IPBar",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release IPBar"
+        }
+    ]
+}

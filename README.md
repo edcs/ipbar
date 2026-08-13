@@ -100,10 +100,14 @@ iconset. `make icon` runs it and compiles the `.icns`. The rendered output is gi
 so the script stays the source of truth and icon changes show up as readable diffs instead
 of binary blobs.
 
-The mark is a label tag lying over a dotted quad. The address is segmented into four
-octets. The name on the tag is one continuous bar, because a name is one word. Below 64px
-the address row drops out and the tag centres itself, since that segmentation just turns
-to noise at small sizes.
+The mark is a globe seen from low orbit at sunrise, wrapped in a network mesh. The mesh is
+a real geodesic rather than a decorative grid: points are spread over a sphere with a
+Fibonacci lattice, projected orthographically, and only the front-facing ones are drawn, so
+density falls away toward the limb the way it actually would. One node is amber instead of
+cyan, which is your named address among all the others.
+
+Below 128px the mesh and the sun's rays drop out, leaving the limb, the atmosphere and the
+sunrise, which still read at 32px where fine linework would only turn to noise.
 
 ## Releasing
 

@@ -5,9 +5,14 @@
 //
 //   swift Tools/GenerateIcon.swift && make icon
 //
-// Concept: an amber label tag lying over a dotted-quad address. The address is
-// segmented (four bars, three dots); the name on the tag is one continuous bar,
-// because a name is one word. The tag covers the number — which is the app.
+// A globe seen from low orbit at sunrise, wrapped in a network mesh. The mesh
+// is a real geodesic: points are distributed on a sphere, projected
+// orthographically, and only the front-facing ones are drawn, so the density
+// falls off toward the limb the way it actually would. One node is amber
+// instead of cyan, which is the named address among all the rest.
+//
+// Everything is vector, so it stays crisp at 1024px and degrades deliberately
+// at small sizes rather than turning to mush.
 
 import CoreGraphics
 import Foundation
@@ -15,8 +20,6 @@ import ImageIO
 import UniformTypeIdentifiers
 
 // MARK: - Palette
-// Drawn from patch-panel and label-tape hardware rather than the blue-globe
-// convention every other IP utility uses.
 
 func srgb(_ hex: UInt32, _ alpha: CGFloat = 1) -> CGColor {
     CGColor(srgbRed: CGFloat((hex >> 16) & 0xFF) / 255,
@@ -26,18 +29,23 @@ func srgb(_ hex: UInt32, _ alpha: CGFloat = 1) -> CGColor {
 }
 
 enum Palette {
-    static let chassisTop = srgb(0x2A2D34)
-    static let chassisBottom = srgb(0x15171B)
-    static let amber = srgb(0xF2B02E)
-    static let amberLight = srgb(0xFFD066)
-    static let ink = srgb(0x141519)
-    static let ghost = srgb(0x8B93A3, 0.34)
+    static let spaceNear = srgb(0x0B1526)
+    static let spaceFar = srgb(0x04060C)
+    static let globeLit = srgb(0x2A7BA6)
+    static let globeMid = srgb(0x0D3A5C)
+    static let globeDark = srgb(0x030D17)
+    static let atmosphere = srgb(0x74DFFF)
+    static let mesh = srgb(0x5FD3FF)
+    static let sunCore = srgb(0xFFF6E2)
+    static let sunWarm = srgb(0xF7B04A)
+    static let named = srgb(0xFFB43D)
+    static let clear = srgb(0x000000, 0)
 }
 
 // MARK: - Geometry
 
 /// Superellipse, the continuous-curvature rounded square macOS uses. Sampled
-/// as a dense polygon — at these resolutions it is indistinguishable from the
+/// as a dense polygon: at these resolutions it is indistinguishable from the
 /// analytic curve and avoids hand-tuned bezier control points.
 func squircle(in rect: CGRect, exponent n: CGFloat = 5) -> CGPath {
     let path = CGMutablePath()
@@ -55,114 +63,202 @@ func squircle(in rect: CGRect, exponent n: CGFloat = 5) -> CGPath {
     return path
 }
 
-/// A luggage/cable tag: rounded rectangle with the left end drawn to a point,
-/// and an eyelet punched near the tip.
-func tagPath(width w: CGFloat, height h: CGFloat, tip: CGFloat,
-             radius r: CGFloat, eyelet: CGFloat) -> CGPath {
-    let path = CGMutablePath()
-    let top = h / 2, bottom = -h / 2
-
-    path.move(to: CGPoint(x: tip, y: top))
-    path.addArc(tangent1End: CGPoint(x: w, y: top), tangent2End: CGPoint(x: w, y: bottom), radius: r)
-    path.addArc(tangent1End: CGPoint(x: w, y: bottom), tangent2End: CGPoint(x: tip, y: bottom), radius: r)
-    path.addLine(to: CGPoint(x: tip, y: bottom))
-    path.addArc(tangent1End: CGPoint(x: 0, y: 0), tangent2End: CGPoint(x: tip, y: top), radius: r * 0.55)
-    path.closeSubpath()
-
-    // Even-odd fill turns this subpath into a hole, so the chassis shows through.
-    path.addEllipse(in: CGRect(x: tip * 0.52 - eyelet, y: -eyelet, width: eyelet * 2, height: eyelet * 2))
-    return path
-}
-
-func roundedBar(x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat) -> CGPath {
-    CGPath(roundedRect: CGRect(x: x, y: y - height / 2, width: width, height: height),
-           cornerWidth: height / 2, cornerHeight: height / 2, transform: nil)
-}
-
-func gradient(_ colors: [CGColor]) -> CGGradient {
+func gradient(_ colors: [CGColor], _ locations: [CGFloat]? = nil) -> CGGradient {
     CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
-               colors: colors as CFArray, locations: [0, 1])!
+               colors: colors as CFArray,
+               locations: locations ?? Array(stride(from: CGFloat(0), through: 1,
+                                                    by: 1 / CGFloat(max(1, colors.count - 1)))))!
+}
+
+struct Vec3 {
+    var x: CGFloat, y: CGFloat, z: CGFloat
+
+    func rotated(pitch: CGFloat, yaw: CGFloat) -> Vec3 {
+        let cp = cos(pitch), sp = sin(pitch)
+        let y1 = y * cp - z * sp
+        let z1 = y * sp + z * cp
+        let cy = cos(yaw), sy = sin(yaw)
+        return Vec3(x: x * cy + z1 * sy, y: y1, z: -x * sy + z1 * cy)
+    }
+
+    func distance(to other: Vec3) -> CGFloat {
+        let dx = x - other.x, dy = y - other.y, dz = z - other.z
+        return sqrt(dx * dx + dy * dy + dz * dz)
+    }
+}
+
+/// Fibonacci lattice: the standard way to scatter points evenly over a sphere
+/// without the pole crowding you get from a lat/long grid.
+func spherePoints(_ count: Int, pitch: CGFloat, yaw: CGFloat) -> [Vec3] {
+    let golden = CGFloat.pi * (3 - sqrt(5))
+    return (0..<count).map { i in
+        let y = 1 - (CGFloat(i) / CGFloat(count - 1)) * 2
+        let ring = sqrt(max(0, 1 - y * y))
+        let theta = golden * CGFloat(i)
+        return Vec3(x: cos(theta) * ring, y: y, z: sin(theta) * ring)
+            .rotated(pitch: pitch, yaw: yaw)
+    }
 }
 
 // MARK: - Drawing
 
 func drawIcon(into ctx: CGContext, size: CGFloat) {
-    let s = size / 1024                      // all geometry authored at 1024
-    let showAddress = size >= 64             // vanishes into noise below this
-    let showDepth = size >= 128
+    let s = size / 1024
+    let showMesh = size >= 128
+    let showRays = size >= 128
 
     ctx.setAllowsAntialiasing(true)
     ctx.interpolationQuality = .high
 
-    // Chassis
     let inset: CGFloat = 100 * s
     let body = CGRect(x: inset, y: inset, width: size - inset * 2, height: size - inset * 2)
     ctx.saveGState()
     ctx.addPath(squircle(in: body))
     ctx.clip()
-    ctx.drawLinearGradient(gradient([Palette.chassisTop, Palette.chassisBottom]),
-                           start: CGPoint(x: 0, y: size), end: CGPoint(x: 0, y: 0),
-                           options: [])
-    ctx.restoreGState()
 
-    // The address being replaced: four octets, three separators.
-    if showAddress {
-        let octets: [CGFloat] = [112, 84, 52, 112]
-        let dot: CGFloat = 18 * s
-        let gap: CGFloat = 21 * s
-        let barHeight: CGFloat = 30 * s
-        let total = octets.reduce(0) { $0 + $1 * s } + 3 * (dot + gap * 2)
-        var x = size / 2 - total / 2
-        let y = size * 0.618
+    // Space. Darkest top-left, faintly lit toward the globe.
+    ctx.drawRadialGradient(gradient([Palette.spaceNear, Palette.spaceFar]),
+                           startCenter: CGPoint(x: size * 0.78, y: size * 0.18), startRadius: 0,
+                           endCenter: CGPoint(x: size * 0.78, y: size * 0.18), endRadius: size * 0.95,
+                           options: [.drawsAfterEndLocation])
 
-        ctx.setFillColor(Palette.ghost)
-        for (index, octet) in octets.enumerated() {
-            ctx.addPath(roundedBar(x: x, y: y, width: octet * s, height: barHeight))
-            ctx.fillPath()
-            x += octet * s
-            if index < octets.count - 1 {
-                x += gap
-                ctx.addPath(CGPath(ellipseIn: CGRect(x: x, y: y - dot / 2, width: dot, height: dot),
-                                   transform: nil))
-                ctx.fillPath()
-                x += dot + gap
-            }
-        }
-    }
+    // The globe sits mostly outside the frame, bottom-right, so only its limb
+    // crosses the icon. The sun sits on that limb.
+    let globe = CGPoint(x: size * 0.80, y: -size * 0.10)
+    let radius = size * 0.72
+    let sun = CGPoint(x: size * 0.635, y: size * 0.585)
 
-    // The tag, tilted as though pinned at the eyelet.
-    ctx.saveGState()
-    // Without the address row above it, the tag alone reads bottom-heavy.
-    ctx.translateBy(x: size * 0.232, y: size * (showAddress ? 0.428 : 0.5))
-    ctx.rotate(by: -6 * .pi / 180)
-
-    let tagWidth = 545 * s, tagHeight = 210 * s
-    let tip = 108 * s
-    let tag = tagPath(width: tagWidth, height: tagHeight, tip: tip,
-                      radius: 40 * s, eyelet: 26 * s)
-
-    if showDepth {
+    // Rays first: the globe is painted over them, so they only survive in space.
+    if showRays {
         ctx.saveGState()
-        ctx.setShadow(offset: CGSize(width: 0, height: -14 * s), blur: 34 * s,
-                      color: srgb(0x000000, 0.45))
-        ctx.setFillColor(Palette.amber)
-        ctx.addPath(tag)
-        ctx.fillPath(using: .evenOdd)
+        ctx.translateBy(x: sun.x, y: sun.y)
+        let rays = 26
+        for i in 0..<rays {
+            let angle = CGFloat(i) / CGFloat(rays) * 2 * .pi
+            let length = size * (i % 3 == 0 ? 0.40 : (i % 3 == 1 ? 0.26 : 0.17))
+            let width = size * (i % 3 == 0 ? 0.009 : 0.005)
+            ctx.saveGState()
+            ctx.rotate(by: angle)
+            let ray = CGMutablePath()
+            ray.move(to: CGPoint(x: 0, y: -width))
+            ray.addLine(to: CGPoint(x: length, y: 0))
+            ray.addLine(to: CGPoint(x: 0, y: width))
+            ray.closeSubpath()
+            ctx.addPath(ray)
+            ctx.setFillColor(srgb(0xFFD9A0, 0.085))
+            ctx.fillPath()
+            ctx.restoreGState()
+        }
         ctx.restoreGState()
     }
 
+    // Sun bloom, also behind the globe.
+    ctx.drawRadialGradient(gradient([Palette.sunCore, Palette.sunWarm, Palette.clear],
+                                    [0, 0.10, 1]),
+                           startCenter: sun, startRadius: 0,
+                           endCenter: sun, endRadius: size * 0.52,
+                           options: [])
+
+    // Atmospheric halo hugging the limb, drawn before the body so it reads as
+    // light scattering outward into space.
+    ctx.drawRadialGradient(gradient([Palette.clear, srgb(0x4FC9F5, 0.55), Palette.clear],
+                                    [0.86, 0.945, 1]),
+                           startCenter: globe, startRadius: 0,
+                           endCenter: globe, endRadius: radius * 1.10,
+                           options: [])
+
+    // Globe body, lit from the sun side.
+    let toSun = CGPoint(x: sun.x - globe.x, y: sun.y - globe.y)
+    let toSunLength = max(0.0001, sqrt(toSun.x * toSun.x + toSun.y * toSun.y))
+    let unit = CGPoint(x: toSun.x / toSunLength, y: toSun.y / toSunLength)
+
     ctx.saveGState()
-    ctx.addPath(tag)
-    ctx.clip(using: .evenOdd)
-    ctx.drawLinearGradient(gradient([Palette.amberLight, Palette.amber]),
-                           start: CGPoint(x: 0, y: tagHeight / 2),
-                           end: CGPoint(x: 0, y: -tagHeight / 2), options: [])
+    ctx.addEllipse(in: CGRect(x: globe.x - radius, y: globe.y - radius,
+                              width: radius * 2, height: radius * 2))
+    ctx.clip()
+    ctx.drawLinearGradient(gradient([Palette.globeLit, Palette.globeMid, Palette.globeDark],
+                                    [0, 0.30, 0.80]),
+                           start: CGPoint(x: globe.x + unit.x * radius, y: globe.y + unit.y * radius),
+                           end: CGPoint(x: globe.x - unit.x * radius * 1.1,
+                                        y: globe.y - unit.y * radius * 1.1),
+                           options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+
+    // Sunlight spilling onto the surface nearest the terminator, which is what
+    // keeps the lit edge warm rather than uniformly blue.
+    ctx.drawRadialGradient(gradient([srgb(0xFFCE8C, 0.50), srgb(0xE08A46, 0.18), Palette.clear],
+                                    [0, 0.35, 1]),
+                           startCenter: sun, startRadius: 0,
+                           endCenter: sun, endRadius: size * 0.46,
+                           options: [])
+
+    // Network mesh, clipped to the globe by the same path.
+    if showMesh {
+        // Each point owns 4pi/N of surface. In a hexagonal packing that area is
+        // 0.866*d^2, so nearest-neighbour distance d = sqrt(4pi / 0.866N). The
+        // threshold has to track N: too low and nothing connects, too high and
+        // it reaches the second ring and degenerates into large quads.
+        let count = 190
+        let spacing = sqrt(4 * .pi / (0.866 * CGFloat(count)))
+        let threshold = spacing * 1.24
+        let points = spherePoints(count, pitch: -0.38, yaw: 0.55)
+        let project: (Vec3) -> CGPoint = { v in
+            CGPoint(x: globe.x + v.x * radius, y: globe.y + v.y * radius)
+        }
+
+        ctx.setLineCap(.round)
+        for i in 0..<points.count {
+            guard points[i].z > 0 else { continue }
+            for j in (i + 1)..<points.count {
+                guard points[j].z > 0 else { continue }
+                guard points[i].distance(to: points[j]) < threshold else { continue }
+                // Fade toward the limb, where a real mesh foreshortens away.
+                let depth = min(points[i].z, points[j].z)
+                ctx.setStrokeColor(Palette.mesh.copy(alpha: 0.13 + depth * 0.47)!)
+                ctx.setLineWidth(max(0.5, 1.5 * s))
+                ctx.move(to: project(points[i]))
+                ctx.addLine(to: project(points[j]))
+                ctx.strokePath()
+            }
+        }
+
+        // Nodes, and the one that carries a name.
+        let target = CGPoint(x: size * 0.60, y: size * 0.22)
+        var namedIndex = -1
+        var best = CGFloat.greatestFiniteMagnitude
+        for (i, v) in points.enumerated() where v.z > 0.55 {
+            let p = project(v)
+            let d = hypot(p.x - target.x, p.y - target.y)
+            if d < best { best = d; namedIndex = i }
+        }
+
+        for (i, v) in points.enumerated() where v.z > 0 {
+            let p = project(v)
+            let r = (i == namedIndex ? 9.5 : 3.0) * s
+            ctx.setFillColor(i == namedIndex
+                             ? Palette.named
+                             : Palette.mesh.copy(alpha: 0.40 + v.z * 0.55)!)
+            if i == namedIndex {
+                ctx.saveGState()
+                ctx.setShadow(offset: .zero, blur: 26 * s, color: srgb(0xFFB43D, 0.95))
+            }
+            ctx.fillEllipse(in: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2))
+            if i == namedIndex { ctx.restoreGState() }
+        }
+    }
     ctx.restoreGState()
 
-    // The name: one continuous mark, against the segmented address behind it.
-    ctx.setFillColor(Palette.ink)
-    ctx.addPath(roundedBar(x: tip + 92 * s, y: 0, width: 300 * s, height: 40 * s))
-    ctx.fillPath()
+    // Bright rim on the lit edge, brightest nearest the sun.
+    ctx.saveGState()
+    ctx.setLineWidth(max(1, 5 * s))
+    ctx.setStrokeColor(Palette.atmosphere.copy(alpha: 0.9)!)
+    ctx.setShadow(offset: .zero, blur: 22 * s, color: srgb(0x8CE6FF, 0.85))
+    let sunAngle = atan2(unit.y, unit.x)
+    let arc = CGMutablePath()
+    arc.addArc(center: globe, radius: radius,
+               startAngle: sunAngle - 1.15, endAngle: sunAngle + 1.15, clockwise: false)
+    ctx.addPath(arc)
+    ctx.strokePath()
+    ctx.restoreGState()
 
     ctx.restoreGState()
 }
