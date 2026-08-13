@@ -35,7 +35,10 @@ struct IPBarApp: App {
                    let flag = FlagStore.shared.menuBarImage(for: country,
                                                             muted: preferences.mutedFlag) {
                     Image(nsImage: flag)
-                        .padding(.leading, 2)
+                        // Wider than the gap between the status symbol and the
+                        // address: that pair reads as one unit, whereas the
+                        // flag is a separate qualifier and wants to sit apart.
+                        .padding(.leading, 6)
                         // Centring on the line box sits the flag optically low,
                         // because the box carries descender space the caps do
                         // not. The extra bottom padding lifts it back.
