@@ -2,7 +2,8 @@ APP_NAME  := IPBar
 BUNDLE    := $(APP_NAME).app
 VERSION   ?= 0.1.0
 DIST      := dist
-BIN       := .build/apple/Products/Release/$(APP_NAME)
+ARM_BIN   := .build/arm64-apple-macosx/release/$(APP_NAME)
+X86_BIN   := .build/x86_64-apple-macosx/release/$(APP_NAME)
 
 # Set these to sign/notarize. SIGN_ID is a "Developer ID Application: ..." identity
 # from `security find-identity -v -p codesigning`; NOTARY_PROFILE is a keychain
@@ -30,11 +31,17 @@ icon:
 	@echo "wrote Resources/AppIcon.icns"
 
 ## Universal (arm64 + x86_64) .app bundle in dist/
+##
+## Each slice is built on its own and merged with lipo. The one-shot form,
+## `swift build --arch arm64 --arch x86_64`, routes through xcbuild and fails
+## on GitHub's macos-15 runner; per-triple builds use the ordinary SwiftPM
+## build system and work everywhere.
 app: Resources/AppIcon.icns
-	swift build -c release --arch arm64 --arch x86_64
+	swift build -c release --triple arm64-apple-macosx
+	swift build -c release --triple x86_64-apple-macosx
 	rm -rf $(DIST)/$(BUNDLE)
 	mkdir -p $(DIST)/$(BUNDLE)/Contents/MacOS $(DIST)/$(BUNDLE)/Contents/Resources
-	cp $(BIN) $(DIST)/$(BUNDLE)/Contents/MacOS/$(APP_NAME)
+	lipo -create -output $(DIST)/$(BUNDLE)/Contents/MacOS/$(APP_NAME) $(ARM_BIN) $(X86_BIN)
 	cp Resources/AppIcon.icns $(DIST)/$(BUNDLE)/Contents/Resources/AppIcon.icns
 	sed 's/__VERSION__/$(VERSION)/g' Resources/Info.plist > $(DIST)/$(BUNDLE)/Contents/Info.plist
 	@echo "built $(DIST)/$(BUNDLE) ($(VERSION))"
