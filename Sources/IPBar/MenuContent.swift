@@ -224,35 +224,49 @@ struct MenuContent: View {
     // MARK: - Footer
 
     private var footer: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Refreshing and reporting when it last happened are the same idea,
-            // so they are one control rather than a button beside a timestamp.
-            Button {
+        VStack(alignment: .leading, spacing: 1) {
+            // Refreshing and saying when it last happened are the same idea, so
+            // the timestamp is the control rather than a label beside one.
+            actionRow(model.isRefreshing ? "Checking…" : lastUpdatedText,
+                      trailing: "arrow.clockwise", muted: true) {
                 model.scheduleRefresh(debounce: .zero)
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "arrow.clockwise").font(.system(size: 10))
-                    Text(model.isRefreshing ? "Checking…" : lastUpdatedText)
-                        .font(.system(size: 11))
-                }
-                .foregroundStyle(.secondary)
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
             .disabled(model.isRefreshing)
             .help("Check again now")
 
-            HStack {
-                Button("Settings…") { openSettings() }
-                Spacer()
-                Button("Quit") { NSApplication.shared.terminate(nil) }
-            }
-            .buttonStyle(.plain)
-            .font(.system(size: 12))
+            actionRow("Settings…") { openSettings() }
+            actionRow("Quit IPBar") { NSApplication.shared.terminate(nil) }
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 9)
-        .padding(.bottom, 11)
+        .padding(.vertical, 6)
+    }
+
+    /// One action per row, full width.
+    ///
+    /// Side by side they were two small targets with a stretch of dead panel
+    /// between them; a row is the width of the panel and reads as a menu item.
+    /// Left edges land at 14pt like every other row, and the icon trails like
+    /// the VPN symbol above.
+    private func actionRow(_ title: String, trailing: String? = nil, muted: Bool = false,
+                           action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.system(size: muted ? 11 : 12))
+                    .foregroundStyle(muted ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                Spacer(minLength: 4)
+                if let trailing {
+                    Image(systemName: trailing)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(RowButtonStyle())
+        .padding(.horizontal, 4)
     }
 
     private var lastUpdatedText: String {
