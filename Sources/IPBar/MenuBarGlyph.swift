@@ -143,15 +143,13 @@ enum MenuBarGlyph {
     /// baseline, and mixing the two is what looked crooked.
     private static func badgeImage(_ text: String, height: CGFloat) -> Part? {
         let stroke: CGFloat = 1
-        let radius = height * 0.3
+        let radius = FlagStore.markCornerRadius
         let font = NSFont.systemFont(ofSize: (height * 0.72).rounded(), weight: .semibold)
         let attributes: [NSAttributedString.Key: Any] = [.font: font,
                                                          .foregroundColor: NSColor.black]
         let string = text as NSString
         let textSize = string.size(withAttributes: attributes)
-        // Measured off the iOS badge: it sets the word in about half a badge
-        // height of space either side, which is what stops it looking cramped.
-        let padding = (height * 0.45).rounded()
+        let padding = (height * 0.36).rounded()
         let width = (textSize.width + padding * 2).rounded()
         guard width > 0, height > 0 else { return nil }
 
@@ -192,7 +190,9 @@ enum MenuBarGlyph {
 
     private static func compose(_ parts: [Part], height: CGFloat,
                                 colour: Bool, dark: Bool) -> NSImage? {
-        let inner: CGFloat = 4
+        // Wider than it was: the flag and the badge are both boxes, and at 4pt
+        // they crowded into one another rather than reading as two marks.
+        let inner: CGFloat = 6
         let lead = FlagStore.menuBarFlagGap
         let width = lead + parts.map(\.image.size.width).reduce(0, +) + inner * CGFloat(parts.count - 1)
 

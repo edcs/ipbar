@@ -230,3 +230,35 @@ struct MenuBarInkTests {
         #expect(light !== dark, "one cache entry for both would freeze the first appearance in")
     }
 }
+
+@Suite("Marks agree with each other")
+@MainActor
+struct MarkConsistencyTests {
+    private var store: FlagStore {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        return FlagStore(directory: root.appendingPathComponent("Resources/Flags"))
+    }
+
+    @Test("the badge and the flag are separated, not touching")
+    func marksAreSeparated() throws {
+        // Two boxes of the same height sitting flush read as one shape.
+        let image = try #require(MenuBarGlyph.image(
+            qualifier: .country("gb"), vpnLabel: "VPN", muted: false, dark: false, store: store))
+        let rep = try #require(image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
+
+        // Count empty columns between the first mark and the last.
+        var columnsWithInk: [Bool] = []
+        for x in 0..<rep.pixelsWide {
+            columnsWithInk.append((0..<rep.pixelsHigh).contains {
+                (rep.colorAt(x: x, y: $0)?.alphaComponent ?? 0) > 0.3
+            })
+        }
+        let first = try #require(columnsWithInk.firstIndex(of: true))
+        let last = try #require(columnsWithInk.lastIndex(of: true))
+        let gaps = columnsWithInk[first...last].filter { !$0 }.count
+        let scale = CGFloat(rep.pixelsWide) / image.size.width
+
+        #expect(CGFloat(gaps) / scale >= 4, "the marks need clear space between them")
+    }
+}

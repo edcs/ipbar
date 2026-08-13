@@ -24,9 +24,9 @@ struct FlagImage: View {
                 // it from being the loudest thing in a quiet panel.
                 .saturation(muted ? 0.25 : 1)
                 .opacity(muted ? 0.55 : 1)
-                .clipShape(RoundedRectangle(cornerRadius: 1.5))
+                .clipShape(RoundedRectangle(cornerRadius: FlagStore.markCornerRadius))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 1.5)
+                    RoundedRectangle(cornerRadius: FlagStore.markCornerRadius)
                         .strokeBorder(.primary.opacity(0.15), lineWidth: 0.5)
                 )
                 .accessibilityLabel(Locale.current.localizedString(forRegionCode: country) ?? country)
@@ -81,6 +81,14 @@ final class FlagStore: @unchecked Sendable {
     /// title and its image, and SwiftUI discards padding applied to the view.
     static let menuBarFlagGap: CGFloat = 5
 
+    /// Corner radius shared by every mark the app draws.
+    ///
+    /// The flag and the VPN badge are the same height and sit side by side, so
+    /// they have to round their corners by the same amount or they read as two
+    /// unrelated things. One constant rather than a literal in each place, so
+    /// they cannot drift apart.
+    static let markCornerRadius: CGFloat = 1.5
+
     /// The flag alone, rasterised for the menu bar with no surrounding margin.
     ///
     /// Muting is baked into the bitmap rather than applied with SwiftUI
@@ -124,13 +132,14 @@ final class FlagStore: @unchecked Sendable {
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
         NSGraphicsContext.current?.imageInterpolation = .high
         let bounds = NSRect(origin: .zero, size: size)
-        NSBezierPath(roundedRect: bounds, xRadius: 1.5, yRadius: 1.5).addClip()
+        let radius = Self.markCornerRadius
+        NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).addClip()
         base.draw(in: bounds)
 
         // A hairline so flags with white in them, like GB or JP, keep an edge
         // against a light menu bar. It disappears against a dark one.
         let edge = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.25, dy: 0.25),
-                                xRadius: 1.5, yRadius: 1.5)
+                                xRadius: radius, yRadius: radius)
         edge.lineWidth = 0.5
         NSColor.black.withAlphaComponent(0.22).setStroke()
         edge.stroke()
