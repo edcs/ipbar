@@ -1,0 +1,22 @@
+name: Commits
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  conventional:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check commit messages
+        env:
+          # A PR is checked against its merge base; a push against what the
+          # branch looked like beforehand.
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: ./Tools/check-commits.sh "${BASE}..${HEAD}"

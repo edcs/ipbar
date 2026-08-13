@@ -1,0 +1,11 @@
+.build/
+dist/
+
+# Generated deterministically by Tools/GenerateIcon.swift — the script is the
+# source of truth, so the rendered output stays out of diffs.
+Resources/AppIcon.iconset/
+Resources/AppIcon.icns
+.swiftpm/
+*.xcodeproj
+*.xcworkspace
+.DS_Store

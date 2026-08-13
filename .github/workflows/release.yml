@@ -1,0 +1,85 @@
+# Signs, notarizes and publishes a release when you push a v* tag.
+#
+# Required repository secrets:
+#   SIGNING_CERTIFICATE_P12  base64 of a Developer ID Application .p12
+#                            (`base64 -i cert.p12 | pbcopy`)
+#   SIGNING_CERTIFICATE_PWD  password for that .p12
+#   SIGNING_IDENTITY         e.g. "Developer ID Application: You (TEAMID)"
+#   APPLE_ID                 Apple ID email
+#   APPLE_TEAM_ID            10-character team ID
+#   APPLE_APP_PASSWORD       app-specific password from appleid.apple.com
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: swift test
+
+      - name: Import signing certificate
+        env:
+          CERTIFICATE: ${{ secrets.SIGNING_CERTIFICATE_P12 }}
+          CERTIFICATE_PWD: ${{ secrets.SIGNING_CERTIFICATE_PWD }}
+        run: |
+          KEYCHAIN=$RUNNER_TEMP/build.keychain
+          KEYCHAIN_PWD=$(uuidgen)
+          security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN"
+          echo "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
+            -P "$CERTIFICATE_PWD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: \
+            -k "$KEYCHAIN_PWD" "$KEYCHAIN"
+          security list-keychain -d user -s "$KEYCHAIN" login.keychain
+          rm "$RUNNER_TEMP/cert.p12"
+
+      - name: Store notarization credentials
+        run: |
+          xcrun notarytool store-credentials ipbar-notary \
+            --apple-id "${{ secrets.APPLE_ID }}" \
+            --team-id "${{ secrets.APPLE_TEAM_ID }}" \
+            --password "${{ secrets.APPLE_APP_PASSWORD }}"
+
+      - name: Build, sign, notarize
+        run: |
+          make release \
+            VERSION="${{ steps.version.outputs.version }}" \
+            SIGN_ID="${{ secrets.SIGNING_IDENTITY }}" \
+            NOTARY_PROFILE=ipbar-notary
+
+      - name: Verify Gatekeeper acceptance
+        run: spctl --assess --type execute --verbose=4 dist/IPBar.app
+
+      - name: Record checksum
+        id: checksum
+        run: |
+          FILE=dist/IPBar-${{ steps.version.outputs.version }}.zip
+          echo "sha256=$(shasum -a 256 "$FILE" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/IPBar-${{ steps.version.outputs.version }}.zip
+          generate_release_notes: true
+          body: |
+            Update the Homebrew cask with:
+
+            ```ruby
+            version "${{ steps.version.outputs.version }}"
+            sha256 "${{ steps.checksum.outputs.sha256 }}"
+            ```

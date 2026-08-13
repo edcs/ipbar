@@ -1,0 +1,129 @@
+import AppKit
+import Foundation
+import Network
+import Observation
+
+@MainActor
+@Observable
+final class NetworkModel {
+    private(set) var interfaces: [NetworkInterface] = []
+    private(set) var vpn = VPNState()
+    private(set) var publicIPv4: String?
+    private(set) var publicIPv6: String?
+    private(set) var lastUpdated: Date?
+    private(set) var isRefreshing = false
+
+    private let preferences: Preferences
+    private let publicIP = PublicIPService()
+    private let monitor = NWPathMonitor()
+    private var refreshTask: Task<Void, Never>?
+    private var timerTask: Task<Void, Never>?
+
+    init(preferences: Preferences) {
+        self.preferences = preferences
+    }
+
+    // MARK: - Display
+
+    /// The local address we consider "the" one: whatever holds the default
+    /// route, falling back to the first physical interface.
+    var primaryLocal: NetworkInterface? {
+        let family: NetworkInterface.Family = preferences.preferIPv6 ? .ipv6 : .ipv4
+        let candidates = interfaces.filter { $0.family == family && !$0.isLinkLocal && $0.kind != .loopback }
+        if let primary = InterfaceScanner.primaryInterface(family: family),
+           let match = candidates.first(where: { $0.bsdName == primary }) {
+            return match
+        }
+        return candidates.first { $0.kind.isPhysical } ?? candidates.first
+    }
+
+    var primaryPublic: String? {
+        preferences.preferIPv6 ? (publicIPv6 ?? publicIPv4) : (publicIPv4 ?? publicIPv6)
+    }
+
+    func name(for address: String, scope: AddressLabel.Scope) -> String? {
+        preferences.labels.name(for: address, scope: scope)
+    }
+
+    /// Applies a matching label, either replacing the address or annotating it.
+    func display(_ address: String?, scope: AddressLabel.Scope) -> String? {
+        guard let address else { return nil }
+        guard let name = name(for: address, scope: scope) else { return address }
+        return preferences.namesReplaceAddresses ? name : "\(name) (\(address))"
+    }
+
+    var menuBarText: String {
+        let local = display(primaryLocal?.address, scope: .localAddress)
+        let remote = display(primaryPublic, scope: .publicAddress)
+
+        switch preferences.displaySource {
+        case .publicAddress: return remote ?? local ?? "No network"
+        case .localAddress: return local ?? "No network"
+        case .both:
+            let parts = [local, remote].compactMap { $0 }
+            return parts.isEmpty ? "No network" : parts.joined(separator: " · ")
+        }
+    }
+
+    var menuBarSymbol: String? {
+        guard preferences.showVPNIndicator, vpn.isActive else { return nil }
+        return vpn.mode == .full ? "lock.fill" : "lock.open.fill"
+    }
+
+    // MARK: - Lifecycle
+
+    func start() {
+        monitor.pathUpdateHandler = { [weak self] _ in
+            Task { @MainActor in self?.scheduleRefresh(debounce: .milliseconds(600)) }
+        }
+        monitor.start(queue: DispatchQueue(label: "com.ipbar.path"))
+
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.scheduleRefresh(debounce: .seconds(2)) }
+        }
+
+        timerTask = Task { [weak self] in
+            while !Task.isCancelled {
+                let minutes = self?.preferences.refreshMinutes ?? 10
+                try? await Task.sleep(for: .seconds(max(1, minutes) * 60))
+                guard !Task.isCancelled else { return }
+                self?.scheduleRefresh(debounce: .zero)
+            }
+        }
+
+        scheduleRefresh(debounce: .zero)
+    }
+
+    func scheduleRefresh(debounce: Duration) {
+        refreshTask?.cancel()
+        refreshTask = Task { [weak self] in
+            if debounce > .zero {
+                try? await Task.sleep(for: debounce)
+                guard !Task.isCancelled else { return }
+            }
+            await self?.refresh()
+        }
+    }
+
+    private func refresh() async {
+        isRefreshing = true
+        defer { isRefreshing = false }
+
+        // Local state is cheap and synchronous — publish it before the network
+        // round trip so the menu bar reacts immediately on a link change.
+        let scanned = InterfaceScanner.scan()
+        interfaces = scanned
+        vpn = VPNState.detect(interfaces: scanned)
+
+        async let v4 = publicIP.fetch(.ipv4)
+        async let v6 = publicIP.fetch(.ipv6)
+        let (fetchedV4, fetchedV6) = await (v4, v6)
+        guard !Task.isCancelled else { return }
+
+        publicIPv4 = fetchedV4
+        publicIPv6 = fetchedV6
+        lastUpdated = Date()
+    }
+}

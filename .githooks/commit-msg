@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+#
+# Enforces Conventional Commits (https://www.conventionalcommits.org).
+#
+# Enabled per clone with `make hooks`, which points core.hooksPath here. The
+# same script runs in CI against every commit in a push or PR, so this file is
+# the single definition of the rule — local and remote cannot drift.
+#
+set -euo pipefail
+
+TYPES="feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert"
+MAX_HEADER=72
+
+MESSAGE_FILE="$1"
+
+# First line that is neither a comment nor blank.
+HEADER=$(grep -v '^#' "$MESSAGE_FILE" | grep -v '^[[:space:]]*$' | head -1 || true)
+
+fail() {
+    cat >&2 <<EOF
+
+✗ Commit message rejected
+
+  $HEADER
+
+$1
+
+  Format:  <type>[(scope)][!]: <description>
+  Types:   ${TYPES//|/, }
+
+  Examples:
+    feat(vpn): detect split tunnels via the default route
+    fix(prefix): stop /12 blocks overflowing the octet mask
+    docs: explain why fastlane is not used
+    feat(api)!: rename the diagnose flag
+
+  '!' before the colon marks a breaking change.
+
+EOF
+    exit 1
+}
+
+# Git's own machinery — merges, reverts and autosquash markers — is not ours
+# to reformat.
+case "$HEADER" in
+    "Merge "*|"Revert "*|"Reapply "*|"fixup!"*|"squash!"*|"amend!"*) exit 0 ;;
+esac
+
+[ -n "$HEADER" ] || fail "  The message is empty."
+
+if ! printf '%s' "$HEADER" | grep -Eq "^(${TYPES})(\([a-z0-9._/-]+\))?!?: .+"; then
+    if printf '%s' "$HEADER" | grep -Eq "^[a-zA-Z]+(\(.*\))?!?:"; then
+        fail "  '$(printf '%s' "$HEADER" | sed -E 's/[(:!].*//')' is not a known type."
+    fi
+    fail "  Missing the '<type>: ' prefix."
+fi
+
+if [ "${#HEADER}" -gt "$MAX_HEADER" ]; then
+    fail "  The subject is ${#HEADER} characters; the limit is ${MAX_HEADER}.
+  Move the detail into the body. It has no length limit."
+fi
+
+case "$HEADER" in
+    *.) fail "  The subject ends with a full stop." ;;
+esac
+
+# A body must be separated from the subject by a blank line, or git tooling
+# treats the whole thing as one long subject.
+SECOND_LINE=$(grep -v '^#' "$MESSAGE_FILE" | sed -n '2p' || true)
+if [ -n "${SECOND_LINE// /}" ]; then
+    fail "  Line 2 must be blank when the message has a body."
+fi
+
+exit 0
