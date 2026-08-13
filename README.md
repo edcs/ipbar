@@ -36,12 +36,16 @@ item. Your settings are stored under `dev.ecs.IPBar`.
 
 ## Naming an address
 
-The quickest way is from the panel itself. Hover an address and click **Name**, or
-right-click it and choose **Name This Address**. Type the name, press Return, and you are
+The quickest way is from the panel itself. Hover a **public** address and click **Name**,
+or right-click it and choose **Name This Address**. Type the name, press Return, and you are
 done. You never have to read the address off the screen and type it back in.
 
 Right-click also offers **Rename** and **Remove Name**. Remove Name only appears when the
 address has its own name, since a name inherited from a wider block belongs to that block.
+
+Naming in the panel is limited to public addresses for now, because an IPv6 address appears
+in both sections at once (see below) and naming it in each would give one address two
+names. Local addresses can still be named in Settings.
 
 For blocks and addresses you are not currently on, go to Settings → **Names** and click
 `+`. The pattern field accepts:
@@ -84,6 +88,13 @@ An interface usually holds more than one IPv6 address, because macOS keeps a sta
 a rotating temporary one for privacy. That would otherwise show up as two identical rows,
 so IPBar marks the one matching your public address **in use**. That's the address the
 outside world actually sees traffic coming from.
+
+## Why an IPv6 address appears twice
+
+Your public IPv6 will usually be identical to one of the addresses under **This Mac**, and
+that is correct rather than a fault. IPv6 has no NAT, so your Mac's global address is the
+one the internet sees. IPv4 differs between the two sections only because NAT sits in the
+way, translating a private address like `192.168.1.77` to a public one.
 
 ## The country flag
 

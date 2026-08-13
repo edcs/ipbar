@@ -14,10 +14,21 @@ struct MenuContent: View {
     @Bindable var preferences: Preferences
     @Environment(\.openWindow) private var openWindow
 
-    @State private var copied: String?
+    /// Identifies a row by address *and* scope.
+    ///
+    /// Without NAT, an IPv6 address is the same string in both sections: it is
+    /// genuinely your interface's address and your public one. Keying row state
+    /// on the address alone made those two rows one row, so hovering either lit
+    /// both and naming either turned both into editors.
+    private struct RowKey: Hashable {
+        let address: String
+        let scope: AddressLabel.Scope
+    }
+
+    @State private var copied: RowKey?
     @State private var resetTask: Task<Void, Never>?
-    @State private var hovered: String?
-    @State private var editing: String?
+    @State private var hovered: RowKey?
+    @State private var editing: RowKey?
     @State private var draftName = ""
     @FocusState private var nameFieldFocused: Bool
 
@@ -132,11 +143,12 @@ struct MenuContent: View {
 
     private func row(kind: String, address: String,
                      scope: AddressLabel.Scope, inUse: Bool = false) -> some View {
-        Group {
-            if editing == address {
-                nameEditor(address: address, scope: scope)
+        let key = RowKey(address: address, scope: scope)
+        return Group {
+            if editing == key {
+                nameEditor(key: key)
             } else {
-                addressRow(kind: kind, address: address, scope: scope, inUse: inUse)
+                addressRow(kind: kind, key: key, inUse: inUse)
             }
         }
         .padding(.horizontal, 4)
@@ -144,14 +156,18 @@ struct MenuContent: View {
 
     /// A named address puts the name first and demotes the address, because
     /// naming is the point of the app. It is the only place colour appears.
-    private func addressRow(kind: String, address: String,
-                            scope: AddressLabel.Scope, inUse: Bool) -> some View {
-        let name = model.name(for: address, scope: scope)
-        let justCopied = copied == address
-        let isHovered = hovered == address
+    private func addressRow(kind: String, key: RowKey, inUse: Bool) -> some View {
+        let address = key.address
+        let name = model.name(for: address, scope: key.scope)
+        let justCopied = copied == key
+        let isHovered = hovered == key
+        // Naming is limited to public addresses for now. Without NAT the same
+        // IPv6 appears in both sections, and letting it be named twice under
+        // two scopes gives one address two different names.
+        let canName = key.scope == .publicAddress
 
         return Button {
-            copy(address)
+            copy(key)
         } label: {
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 6) {
@@ -204,9 +220,9 @@ struct MenuContent: View {
         // Sits above the row rather than inside it: a control nested in a
         // Button's label never receives the click.
         .overlay(alignment: .topTrailing) {
-            if isHovered {
+            if isHovered, canName {
                 Button(name == nil ? "Name" : "Rename") {
-                    beginNaming(address, existing: name)
+                    beginNaming(key, existing: name)
                 }
                 .buttonStyle(.plain)
                 .font(.system(size: 10, weight: .medium))
@@ -216,16 +232,18 @@ struct MenuContent: View {
             }
         }
         .onHover { inside in
-            if inside { hovered = address } else if hovered == address { hovered = nil }
+            if inside { hovered = key } else if hovered == key { hovered = nil }
         }
         .contextMenu {
-            Button("Copy Address") { copy(address) }
-            Button(name == nil ? "Name This Address…" : "Rename…") {
-                beginNaming(address, existing: name)
-            }
-            if hasOwnLabel(address, scope: scope) {
-                Divider()
-                Button("Remove Name") { removeName(address, scope: scope) }
+            Button("Copy Address") { copy(key) }
+            if canName {
+                Button(name == nil ? "Name This Address…" : "Rename…") {
+                    beginNaming(key, existing: name)
+                }
+                if hasOwnLabel(key) {
+                    Divider()
+                    Button("Remove Name") { removeName(key) }
+                }
             }
         }
         .help("Copy \(address)")
@@ -234,7 +252,7 @@ struct MenuContent: View {
 
     /// Renaming in place, so the address never has to be typed out. The whole
     /// point of a name is not having to remember the number behind it.
-    private func nameEditor(address: String, scope: AddressLabel.Scope) -> some View {
+    private func nameEditor(key: RowKey) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 6) {
                 // Left at the default colour: amber marks a name that is set,
@@ -243,7 +261,7 @@ struct MenuContent: View {
                     .textFieldStyle(.plain)
                     .font(.system(size: 12, weight: .semibold))
                     .focused($nameFieldFocused)
-                    .onSubmit { commitName(address: address, scope: scope) }
+                    .onSubmit { commitName(key) }
                     .onExitCommand { cancelNaming() }
 
                 Text("↩ save · esc cancel")
@@ -252,7 +270,7 @@ struct MenuContent: View {
                     .fixedSize()
             }
 
-            Text(address)
+            Text(key.address)
                 .font(.system(size: 12.5, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -266,7 +284,7 @@ struct MenuContent: View {
         // the responder chain and the request is dropped, which is why a second
         // open appeared to work when the first did not. Keep asking briefly and
         // stop as soon as it takes.
-        .task(id: address) {
+        .task(id: key) {
             for _ in 0..<12 {
                 if nameFieldFocused { return }
                 nameFieldFocused = true
@@ -369,9 +387,9 @@ struct MenuContent: View {
 
     // MARK: - Actions
 
-    private func beginNaming(_ address: String, existing: String?) {
+    private func beginNaming(_ key: RowKey, existing: String?) {
         draftName = existing ?? ""
-        editing = address
+        editing = key
     }
 
     private func cancelNaming() {
@@ -379,25 +397,25 @@ struct MenuContent: View {
         draftName = ""
     }
 
-    private func commitName(address: String, scope: AddressLabel.Scope) {
-        preferences.labels.setName(draftName, for: address, scope: scope)
+    private func commitName(_ key: RowKey) {
+        preferences.labels.setName(draftName, for: key.address, scope: key.scope)
         cancelNaming()
     }
 
-    private func hasOwnLabel(_ address: String, scope: AddressLabel.Scope) -> Bool {
-        preferences.labels.hasOwnLabel(for: address, scope: scope)
+    private func hasOwnLabel(_ key: RowKey) -> Bool {
+        preferences.labels.hasOwnLabel(for: key.address, scope: key.scope)
     }
 
-    private func removeName(_ address: String, scope: AddressLabel.Scope) {
-        preferences.labels.removeLabel(for: address, scope: scope)
+    private func removeName(_ key: RowKey) {
+        preferences.labels.removeLabel(for: key.address, scope: key.scope)
     }
 
-    private func copy(_ address: String) {
+    private func copy(_ key: RowKey) {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(address, forType: .string)
+        NSPasteboard.general.setString(key.address, forType: .string)
 
         resetTask?.cancel()
-        copied = address
+        copied = key
         resetTask = Task {
             try? await Task.sleep(for: .seconds(1.4))
             guard !Task.isCancelled else { return }
