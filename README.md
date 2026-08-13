@@ -99,7 +99,7 @@ instead: Wi-Fi, Ethernet, or cellular.
 ```sh
 make hooks           # enable the commit-message hook, once per clone
 swift build          # compile
-swift test           # 20 tests, no network needed
+swift test           # 39 tests, no network needed
 make icon            # redraw the icon and compile the .icns
 make app             # universal .app in dist/
 make run             # build and launch
