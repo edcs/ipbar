@@ -72,12 +72,14 @@ final class FlagStore: @unchecked Sendable {
     /// modifiers, because a `MenuBarExtra` label is rendered by the system and
     /// does not reliably honour effects like `.saturation`. `isTemplate` stays
     /// false so the colour survives the menu bar's usual monochrome treatment.
-    /// Cap height of the menu bar font, which for an address of digits is also
-    /// the digit height. Sizing the flag to it aligns its top and bottom edges
-    /// with the numerals beside it, and it follows the font if the menu bar
-    /// text size changes.
+    /// Two points above the cap height of the menu bar font.
+    ///
+    /// Exactly cap height lines the flag up with the digits beside it, but a
+    /// wide, low rectangle reads smaller than type of the same height, so it
+    /// looked undersized. The overshoot corrects for that while still being
+    /// derived from the font, so it follows any change to menu bar text size.
     static var menuBarFlagHeight: CGFloat {
-        NSFont.menuBarFont(ofSize: 0).capHeight.rounded()
+        NSFont.menuBarFont(ofSize: 0).capHeight.rounded() + 2
     }
 
     /// Space between the address and the flag, carried as transparent margin

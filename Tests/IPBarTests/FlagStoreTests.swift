@@ -108,16 +108,19 @@ struct MenuBarFlagTests {
         #expect(abs(fadedSpread) < abs(plainSpread))
     }
 
-    @Test("the default height matches the menu bar cap height")
-    func matchesCapHeight() throws {
-        // Digits are cap height, so this is what makes the flag's top and
-        // bottom line up with the address beside it.
-        let expected = NSFont.menuBarFont(ofSize: 0).capHeight.rounded()
-        #expect(FlagStore.menuBarFlagHeight == expected)
+    @Test("the default height is derived from the menu bar font")
+    func tracksMenuBarFont() throws {
+        // Slightly over cap height, since a wide low rectangle reads smaller
+        // than type of the same height. Still derived from the font so it
+        // follows a change to menu bar text size.
+        let font = NSFont.menuBarFont(ofSize: 0)
+        let capHeight = font.capHeight.rounded()
+        #expect(FlagStore.menuBarFlagHeight == capHeight + 2)
 
         let image = try #require(store.menuBarImage(for: "gb", muted: false))
-        #expect(image.size.height == expected)
-        #expect(image.size.height < NSLayoutManager().defaultLineHeight(for: NSFont.menuBarFont(ofSize: 0)))
+        #expect(image.size.height == FlagStore.menuBarFlagHeight)
+        // It must still sit inside the line box, or it crowds the menu bar.
+        #expect(image.size.height < NSLayoutManager().defaultLineHeight(for: font))
     }
 
     @Test("an unknown country renders nothing")
