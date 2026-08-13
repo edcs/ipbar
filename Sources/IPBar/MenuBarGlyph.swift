@@ -18,6 +18,8 @@ enum MenuBarGlyph {
         case country(String)
         /// SF Symbol for the interface the local address belongs to.
         case interface(String)
+        /// On a network, but the internet cannot be reached.
+        case offline
     }
 
     /// Marks a local address as being on your own network.
@@ -28,6 +30,14 @@ enum MenuBarGlyph {
     /// device attached to a network line says it without borrowing either, and
     /// it holds up whether you are on Wi-Fi or Ethernet.
     nonisolated static let localNetworkSymbol = "rectangle.connected.to.line.below"
+
+    /// Marks an address that cannot currently reach the internet.
+    ///
+    /// A struck-through globe, and the counterpart to the reasoning behind the
+    /// local mark: `network` was rejected there precisely because a globe means
+    /// the internet rather than your own network, which is what makes its
+    /// struck-through form exactly right for having none.
+    nonisolated static let offlineSymbol = "network.slash"
 
     private static var cache: [String: NSImage] = [:]
 
@@ -50,6 +60,10 @@ enum MenuBarGlyph {
             }
         case .interface(let symbol):
             if let glyph = symbolImage(symbol, inkHeight: symbolInkHeight) {
+                parts.append(Part(image: glyph, baseline: nil))
+            }
+        case .offline:
+            if let glyph = symbolImage(offlineSymbol, inkHeight: symbolInkHeight) {
                 parts.append(Part(image: glyph, baseline: nil))
             }
         }

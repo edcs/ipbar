@@ -262,3 +262,40 @@ struct MarkConsistencyTests {
         #expect(CGFloat(gaps) / scale >= 4, "the marks need clear space between them")
     }
 }
+
+@Suite("Offline mark")
+@MainActor
+struct OfflineMarkTests {
+    private var store: FlagStore {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        return FlagStore(directory: root.appendingPathComponent("Resources/Flags"))
+    }
+
+    @Test("the offline symbol exists and is not the system Wi-Fi glyph")
+    func symbolIsUsable() {
+        #expect(NSImage(systemSymbolName: MenuBarGlyph.offlineSymbol,
+                        accessibilityDescription: nil) != nil)
+        // wifi.slash would say Wi-Fi is off, which is a different fact and
+        // duplicates an indicator macOS already shows.
+        #expect(!MenuBarGlyph.offlineSymbol.hasPrefix("wifi"))
+    }
+
+    @Test("offline renders a mark, and a template one so the system tints it")
+    func offlineRenders() throws {
+        let image = try #require(MenuBarGlyph.image(
+            qualifier: .offline, vpnLabel: nil, muted: false, dark: false, store: store))
+        #expect(image.size.width > 0)
+        #expect(image.isTemplate)
+    }
+
+    @Test("it is the same weight as the other marks")
+    func matchesOtherMarks() throws {
+        let offline = try #require(MenuBarGlyph.image(
+            qualifier: .offline, vpnLabel: nil, muted: false, dark: false, store: store))
+        let local = try #require(MenuBarGlyph.image(
+            qualifier: .interface(MenuBarGlyph.localNetworkSymbol),
+            vpnLabel: nil, muted: false, dark: false, store: store))
+        #expect(offline.size.height == local.size.height)
+    }
+}

@@ -75,9 +75,7 @@ struct MenuContent: View {
             }
 
             if model.publicIPv4 == nil && model.publicIPv6 == nil {
-                placeholder(model.isRefreshing
-                            ? "Looking up your public address…"
-                            : "Can't reach the internet right now.")
+                placeholder(unreachableMessage)
             } else {
                 if let address = model.publicIPv4 {
                     row(kind: "IPv4", address: address, scope: .publicAddress,
@@ -136,8 +134,22 @@ struct MenuContent: View {
         Text(text)
             .font(.callout)
             .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
+    }
+
+    /// Says which of the two failures this is, and what to do about it.
+    ///
+    /// Being on a network with no internet is a different problem from having
+    /// no network, and the usual cause of the first is a sign-in page nobody
+    /// has been shown yet.
+    private var unreachableMessage: String {
+        if model.isRefreshing { return "Looking up your public address…" }
+        guard let interface = model.localGroups.first?.id else {
+            return "No network. Turn on Wi-Fi or plug a cable in."
+        }
+        return "On \(interface), but can't reach the internet. It may be waiting for you to sign in."
     }
 
     // MARK: - Address row

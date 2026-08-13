@@ -122,12 +122,28 @@ final class NetworkModel {
         return "VPN"
     }
 
+    /// On a network, but the internet is out of reach.
+    ///
+    /// Only true once a lookup has actually finished and failed. While one is
+    /// in flight the previous answer still stands, so a slow check never
+    /// flickers into looking like an outage.
+    var isOffline: Bool {
+        lastUpdated != nil && publicIPv4 == nil && publicIPv6 == nil
+    }
+
     /// What trails the address in the menu bar.
     ///
     /// A flag describes where the *public* address is, so showing one beside a
     /// local address states something untrue about it. A local address gets the
     /// interface it belongs to instead, which is the equivalent fact about it.
     var menuBarQualifier: MenuBarGlyph.Qualifier {
+        // Checked before the flag setting, and deliberately: this is a status
+        // rather than decoration. With no public address the menu bar falls
+        // back to showing a local one, which looks like a working connection
+        // unless something says otherwise.
+        if preferences.displaySource != .localAddress, isOffline, primaryLocal != nil {
+            return .offline
+        }
         guard preferences.showFlagInMenuBar else { return .none }
 
         switch preferences.displaySource {

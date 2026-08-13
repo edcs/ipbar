@@ -14,6 +14,8 @@ head every time. Tell IPBar it's called "Office" and the menu bar says `Office`.
 - Public IPv4 and IPv6, plus every local interface. Click any address to copy it.
 - **Country flag** for your public address, with a muted option if you'd rather it sat
   quietly. Useful for checking which country your VPN is exiting from.
+- **Tells you when the internet is out of reach**, rather than quietly falling back to
+  showing a local address as though nothing were wrong.
 - Updates when the network changes and when your Mac wakes. It doesn't poll.
 - No dock icon. No analytics. No network calls except the public IP lookup.
 
@@ -82,6 +84,23 @@ tunnel interface. Nothing is special-cased.
 To see everything the menu bar is derived from, run `IPBar --diagnose`. It's useful in bug
 reports, and you can compare it against `scutil --nwi`.
 
+## When the internet can't be reached
+
+Being on a network and having internet are different things, and IPBar says which one you
+have.
+
+With no public address to show, the menu bar falls back to a local one, which on its own
+looks like a working connection. It carries a struck-through globe to say otherwise, and
+that mark ignores the flag setting, because it reports a fault rather than decorating the
+bar.
+
+The panel names the failure. No interfaces at all is "No network", and it tells you to turn
+Wi-Fi on or plug a cable in. On a network without internet, it says so and points at the
+usual cause, which is a sign-in page nobody has been shown yet.
+
+The mark only appears once a lookup has finished and failed. While one is in flight the
+previous answer stands, so a slow check never flickers into looking like an outage.
+
 ## Your IPv6 address is your public address
 
 IPv6 has no NAT, so your Mac's global address is the one the internet sees. The same address
@@ -120,7 +139,7 @@ the address.
 ```sh
 make hooks           # enable the commit-message hook, once per clone
 swift build          # compile
-swift test           # 66 tests, no network needed
+swift test           # 69 tests, no network needed
 make icon            # redraw the icon and compile the .icns
 make app             # universal .app in dist/
 make run             # build and launch
