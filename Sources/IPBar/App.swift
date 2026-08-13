@@ -27,16 +27,12 @@ struct IPBarApp: App {
             // image, so the order written here is not the order drawn and any
             // padding is discarded. MenuBarLayout moves the image after the
             // title; the gap before the flag is baked into the image.
-            HStack(spacing: 4) {
-                if let symbol = model.menuBarSymbol {
-                    Image(systemName: symbol)
-                }
+            HStack(spacing: 0) {
                 Text(model.menuBarText)
-                if preferences.flagVisibility.showsInMenuBar,
-                   let country = model.country,
-                   let flag = FlagStore.shared.menuBarImage(for: country,
-                                                            muted: preferences.mutedFlag) {
-                    Image(nsImage: flag)
+                if let glyph = MenuBarGlyph.image(qualifier: model.menuBarQualifier,
+                                                  vpnSymbol: model.menuBarSymbol,
+                                                  muted: preferences.mutedFlag) {
+                    Image(nsImage: glyph)
                 }
             }
             .task {
@@ -45,7 +41,7 @@ struct IPBarApp: App {
             }
             // SwiftUI puts imagePosition back whenever the label changes.
             .onChange(of: model.menuBarText) { MenuBarLayout.placeFlagAfterAddress() }
-            .onChange(of: model.country) { MenuBarLayout.placeFlagAfterAddress() }
+            .onChange(of: model.menuBarQualifier) { MenuBarLayout.placeFlagAfterAddress() }
         }
         .menuBarExtraStyle(.window)
 

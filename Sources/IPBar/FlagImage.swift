@@ -66,12 +66,6 @@ final class FlagStore: @unchecked Sendable {
         return image
     }
 
-    /// A flag sized and rasterised for the menu bar.
-    ///
-    /// The muting is baked into the bitmap rather than applied with SwiftUI
-    /// modifiers, because a `MenuBarExtra` label is rendered by the system and
-    /// does not reliably honour effects like `.saturation`. `isTemplate` stays
-    /// false so the colour survives the menu bar's usual monochrome treatment.
     /// Two points above the cap height of the menu bar font.
     ///
     /// Exactly cap height lines the flag up with the digits beside it, but a
@@ -82,15 +76,22 @@ final class FlagStore: @unchecked Sendable {
         NSFont.menuBarFont(ofSize: 0).capHeight.rounded() + 2
     }
 
-    /// Space between the address and the flag, carried as transparent margin
-    /// inside the image: an `NSStatusItem` button puts no gap between its title
-    /// and its image, and SwiftUI discards padding applied to the view.
+    /// Space between the address and whatever trails it, carried as transparent
+    /// margin inside the image: an `NSStatusItem` button puts no gap between its
+    /// title and its image, and SwiftUI discards padding applied to the view.
     static let menuBarFlagGap: CGFloat = 5
 
-    /// A flag as tall as the full line box reads as a block beside the type
-    /// rather than a companion mark, so the default is cap height instead.
-    func menuBarImage(for country: String, muted: Bool,
-                      height: CGFloat = FlagStore.menuBarFlagHeight) -> NSImage? {
+    /// The flag alone, rasterised for the menu bar with no surrounding margin.
+    ///
+    /// Muting is baked into the bitmap rather than applied with SwiftUI
+    /// modifiers, because a `MenuBarExtra` label is rendered by the system and
+    /// does not reliably honour effects like `.saturation`. `isTemplate` stays
+    /// false so the colour survives the menu bar's monochrome treatment.
+    ///
+    /// `MenuBarGlyph` assembles this with any other marks and adds the gap,
+    /// because the menu bar button has room for only one image.
+    func badge(for country: String, muted: Bool,
+               height: CGFloat = FlagStore.menuBarFlagHeight) -> NSImage? {
         let key = "\(country.lowercased())|\(muted)|\(Int(height))"
 
         lock.lock()
@@ -108,10 +109,7 @@ final class FlagStore: @unchecked Sendable {
     private func renderForMenuBar(country: String, muted: Bool, height: CGFloat) -> NSImage? {
         guard let base = flag(for: country) else { return nil }
 
-        let flag = NSSize(width: (height * 4 / 3).rounded(), height: height)
-
-        let gap = Self.menuBarFlagGap
-        let size = NSSize(width: flag.width + gap, height: flag.height)
+        let size = NSSize(width: (height * 4 / 3).rounded(), height: height)
 
         let scale: CGFloat = 2   // menu bars are Retina; draw at 2x and let AppKit pick
         guard let rep = NSBitmapImageRep(
@@ -125,7 +123,7 @@ final class FlagStore: @unchecked Sendable {
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
         NSGraphicsContext.current?.imageInterpolation = .high
-        let bounds = NSRect(x: gap, y: 0, width: flag.width, height: flag.height)
+        let bounds = NSRect(origin: .zero, size: size)
         NSBezierPath(roundedRect: bounds, xRadius: 1.5, yRadius: 1.5).addClip()
         base.draw(in: bounds)
 

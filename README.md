@@ -90,6 +90,10 @@ panel and the menu bar. **Mute the flag** fades it, which keeps it readable as a
 without it becoming the loudest thing on screen. That matters more in the menu bar, where a
 full-colour flag sits next to monochrome system icons.
 
+A flag describes where your *public* address is, so it would say something untrue beside a
+local one. When the menu bar is set to show a local address, you get that interface's icon
+instead: Wi-Fi, Ethernet, or cellular.
+
 ## Development
 
 ```sh
@@ -129,6 +133,7 @@ Sources live in `Sources/IPBar/`.
 | `MenuContent.swift` | the panel that opens from the menu bar |
 | `SettingsView.swift` | the General and Names tabs |
 | `FlagImage.swift` | flag rendering and the cached lookup behind it |
+| `MenuBarGlyph.swift` | composes whatever trails the address in the menu bar |
 | `Diagnostics.swift` | `--diagnose` output |
 | `Tools/GenerateIcon.swift` | draws the app icon |
 | `Tools/setup-signing.sh` | one-time certificate and notarization setup |

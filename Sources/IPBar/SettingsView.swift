@@ -22,6 +22,7 @@ struct SettingsView: View {
             Picker("Country flag", selection: $preferences.flagVisibility) {
                 ForEach(FlagVisibility.allCases, id: \.self) { Text($0.title).tag($0) }
             }
+            .help("A flag says where your public address is, so when the menu bar shows a local address it shows that interface instead")
             Toggle("Mute the flag", isOn: $preferences.mutedFlag)
                 .disabled(preferences.flagVisibility == .hidden)
                 .help("Fades the flag so it reads as a label rather than the loudest thing on screen")

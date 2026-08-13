@@ -97,6 +97,26 @@ final class NetworkModel {
         return vpn.mode == .full ? "lock.fill" : "lock.open.fill"
     }
 
+    /// What trails the address in the menu bar.
+    ///
+    /// A flag describes where the *public* address is, so showing one beside a
+    /// local address states something untrue about it. A local address gets the
+    /// interface it belongs to instead, which is the equivalent fact about it.
+    var menuBarQualifier: MenuBarGlyph.Qualifier {
+        guard preferences.flagVisibility.showsInMenuBar else { return .none }
+
+        switch preferences.displaySource {
+        case .localAddress:
+            guard let kind = primaryLocal?.kind else { return .none }
+            return .interface(kind.menuBarSymbol)
+        case .publicAddress, .both:
+            // Falls back to the local address when the public one is unknown,
+            // so the flag has to go with it.
+            guard primaryPublic != nil, let country else { return .none }
+            return .country(country)
+        }
+    }
+
     // MARK: - Lifecycle
 
     func start() {
