@@ -30,7 +30,10 @@ struct MenuContent: View {
             Divider()
             footer
         }
-        .frame(width: 344)
+        // Wide enough for a full IPv6 plus the "in use" badge on one line:
+        // the address measures 278pt at this size, and truncating it would
+        // defeat the point of giving the row two lines.
+        .frame(width: 358)
     }
 
     // MARK: - Sections
@@ -148,24 +151,31 @@ struct MenuContent: View {
 
                     Spacer(minLength: 4)
 
+                    if name != nil {
+                        Text(kind).font(.system(size: 10)).foregroundStyle(.tertiary)
+                    }
+                }
+
+                // "in use" and the copy confirmation both describe the address,
+                // so they sit on its line rather than up beside the label.
+                HStack(spacing: 6) {
+                    Text(address)
+                        .font(.system(size: 12.5, design: .monospaced))
+                        .foregroundStyle(name == nil ? .primary : .secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    Spacer(minLength: 4)
+
                     if justCopied {
                         Label("Copied", systemImage: "checkmark")
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(.secondary)
                             .labelStyle(.titleAndIcon)
-                    } else {
-                        if name != nil {
-                            Text(kind).font(.system(size: 10)).foregroundStyle(.tertiary)
-                        }
-                        if inUse { badge("in use") }
+                    } else if inUse {
+                        badge("in use")
                     }
                 }
-
-                Text(address)
-                    .font(.system(size: 12.5, design: .monospaced))
-                    .foregroundStyle(name == nil ? .primary : .secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 5)

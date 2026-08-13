@@ -39,7 +39,6 @@ enum StatusItemProbe {
 
             let renderer = ImageRenderer(content:
                 MenuContent(model: model, preferences: preferences)
-                    .frame(width: 344)
                     .background(Color(nsColor: .windowBackgroundColor))
             )
             renderer.scale = 2
