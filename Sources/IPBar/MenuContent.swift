@@ -42,14 +42,19 @@ struct MenuContent: View {
         Group {
             sectionHeader("Public") {
                 if let country = model.country {
+                    // Flag last here too, so it lands in the same right-hand
+                    // column as the badges and the VPN symbol below.
                     HStack(spacing: 4) {
-                        if preferences.flagVisibility.showsInPanel {
-                            FlagImage(country: country, muted: preferences.mutedFlag)
-                        }
                         Text(country)
                             .font(.system(size: 10, weight: .semibold))
                             .monospaced()
                             .foregroundStyle(.secondary)
+                        if preferences.flagVisibility.showsInPanel {
+                            // Sized against the 10pt header type beside it, not
+                            // the larger body text elsewhere in the panel.
+                            FlagImage(country: country, height: 9,
+                                      muted: preferences.mutedFlag)
+                        }
                     }
                     .help(Locale.current.localizedString(forRegionCode: country)
                           .map { "Your public address is in \($0)" } ?? "Country of your public address")
@@ -191,12 +196,9 @@ struct MenuContent: View {
     // MARK: - VPN
 
     private var vpnRow: some View {
+        // The symbol trails rather than leads: a leading icon column indented
+        // this text 25pt further than every other row in the panel.
         HStack(spacing: 9) {
-            Image(systemName: model.vpn.symbol)
-                .font(.system(size: 13))
-                .foregroundStyle(model.vpn.isActive ? Palette.secure : Color.secondary)
-                .frame(width: 16)
-
             VStack(alignment: .leading, spacing: 0) {
                 Text(model.vpn.headline).font(.system(size: 12))
                 if let detail = model.vpn.detail {
@@ -206,6 +208,9 @@ struct MenuContent: View {
                 }
             }
             Spacer()
+            Image(systemName: model.vpn.symbol)
+                .font(.system(size: 13))
+                .foregroundStyle(model.vpn.isActive ? Palette.secure : Color.secondary)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 9)

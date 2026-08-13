@@ -72,7 +72,18 @@ final class FlagStore: @unchecked Sendable {
     /// modifiers, because a `MenuBarExtra` label is rendered by the system and
     /// does not reliably honour effects like `.saturation`. `isTemplate` stays
     /// false so the colour survives the menu bar's usual monochrome treatment.
-    func menuBarImage(for country: String, muted: Bool, height: CGFloat = 12) -> NSImage? {
+    /// Cap height of the menu bar font, which for an address of digits is also
+    /// the digit height. Sizing the flag to it aligns its top and bottom edges
+    /// with the numerals beside it, and it follows the font if the menu bar
+    /// text size changes.
+    static var menuBarFlagHeight: CGFloat {
+        NSFont.menuBarFont(ofSize: 0).capHeight.rounded()
+    }
+
+    /// A flag as tall as the full line box reads as a block beside the type
+    /// rather than a companion mark, so the default is cap height instead.
+    func menuBarImage(for country: String, muted: Bool,
+                      height: CGFloat = FlagStore.menuBarFlagHeight) -> NSImage? {
         let key = "\(country.lowercased())|\(muted)|\(Int(height))"
 
         lock.lock()
@@ -106,6 +117,14 @@ final class FlagStore: @unchecked Sendable {
         let bounds = NSRect(origin: .zero, size: size)
         NSBezierPath(roundedRect: bounds, xRadius: 1.5, yRadius: 1.5).addClip()
         base.draw(in: bounds)
+
+        // A hairline so flags with white in them, like GB or JP, keep an edge
+        // against a light menu bar. It disappears against a dark one.
+        let edge = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.25, dy: 0.25),
+                                xRadius: 1.5, yRadius: 1.5)
+        edge.lineWidth = 0.5
+        NSColor.black.withAlphaComponent(0.22).setStroke()
+        edge.stroke()
         NSGraphicsContext.restoreGraphicsState()
 
         let image = NSImage(size: size)

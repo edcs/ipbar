@@ -22,17 +22,25 @@ struct IPBarApp: App {
         MenuBarExtra {
             MenuContent(model: model, preferences: preferences)
         } label: {
+            // Status, then content, then qualifier: the VPN symbol prefixes as
+            // a status conventionally does, while the flag follows the address
+            // it qualifies rather than preceding it.
             HStack(spacing: 4) {
                 if let symbol = model.menuBarSymbol {
                     Image(systemName: symbol)
                 }
+                Text(model.menuBarText)
                 if preferences.flagVisibility.showsInMenuBar,
                    let country = model.country,
                    let flag = FlagStore.shared.menuBarImage(for: country,
                                                             muted: preferences.mutedFlag) {
                     Image(nsImage: flag)
+                        .padding(.leading, 2)
+                        // Centring on the line box sits the flag optically low,
+                        // because the box carries descender space the caps do
+                        // not. The extra bottom padding lifts it back.
+                        .padding(.bottom, 1)
                 }
-                Text(model.menuBarText)
             }
             .task { model.start() }
         }
