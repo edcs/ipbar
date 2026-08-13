@@ -95,11 +95,18 @@ final class NetworkModel {
         preferences.labels.name(for: address, scope: scope)
     }
 
-    /// Applies a matching label, either replacing the address or annotating it.
+    /// Applies a matching label, however the menu bar has been asked to show
+    /// named addresses. An address with no name is always just the address.
     func display(_ address: String?, scope: AddressLabel.Scope) -> String? {
         guard let address else { return nil }
-        guard let name = name(for: address, scope: scope) else { return address }
-        return preferences.namesReplaceAddresses ? name : "\(name) (\(address))"
+        guard preferences.nameDisplay != .address,
+              let name = name(for: address, scope: scope) else { return address }
+
+        switch preferences.nameDisplay {
+        case .name: return name
+        case .nameAndAddress: return "\(name) (\(address))"
+        case .address: return address
+        }
     }
 
     var menuBarText: String {

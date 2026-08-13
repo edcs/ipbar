@@ -23,7 +23,10 @@ struct SettingsView: View {
                 .help("A flag says where your public address is, so when the menu bar shows a local address it shows a local network icon instead")
             Toggle("Mute the flag", isOn: $preferences.mutedFlag)
                 .help("Fades the flag so it reads as a label rather than the loudest thing on screen")
-            Toggle("Show name instead of address", isOn: $preferences.namesReplaceAddresses)
+            Picker("Named addresses show", selection: $preferences.nameDisplay) {
+                ForEach(NameDisplay.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            .help("Only affects the menu bar. The panel always shows both.")
             Picker("Refresh every", selection: $preferences.refreshMinutes) {
                 ForEach([1, 5, 10, 30, 60], id: \.self) { Text("\($0) min").tag($0) }
             }

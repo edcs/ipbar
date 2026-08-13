@@ -2,6 +2,22 @@ import Foundation
 import Observation
 import ServiceManagement
 
+/// What the menu bar makes of an address that has a name.
+///
+/// A toggle called "show name instead of address" hid the middle option in its
+/// off state, so the choice is spelled out.
+enum NameDisplay: String, CaseIterable, Codable, Sendable {
+    case name, nameAndAddress, address
+
+    var title: String {
+        switch self {
+        case .name: return "Name"
+        case .nameAndAddress: return "Name and address"
+        case .address: return "Address"
+        }
+    }
+}
+
 enum DisplaySource: String, CaseIterable, Codable, Sendable {
     case publicAddress, localAddress, both
 
@@ -22,8 +38,7 @@ final class Preferences {
     var showVPNIndicator: Bool { didSet { write(showVPNIndicator, .showVPNIndicator) } }
     var showFlagInMenuBar: Bool { didSet { write(showFlagInMenuBar, .showFlagInMenuBar) } }
     var mutedFlag: Bool { didSet { write(mutedFlag, .mutedFlag) } }
-    /// When a label matches, show only the name. Off shows "Name (1.2.3.4)".
-    var namesReplaceAddresses: Bool { didSet { write(namesReplaceAddresses, .namesReplaceAddresses) } }
+    var nameDisplay: NameDisplay { didSet { write(nameDisplay.rawValue, .nameDisplay) } }
     var refreshMinutes: Int { didSet { write(refreshMinutes, .refreshMinutes) } }
 
     var labels: [AddressLabel] {
@@ -49,7 +64,7 @@ final class Preferences {
     }
 
     private enum Key: String {
-        case displaySource, preferIPv6, showVPNIndicator, namesReplaceAddresses, refreshMinutes, labels
+        case displaySource, preferIPv6, showVPNIndicator, nameDisplay, refreshMinutes, labels
         case showFlagInMenuBar, mutedFlag
     }
 
@@ -63,7 +78,8 @@ final class Preferences {
         showVPNIndicator = defaults.object(forKey: Key.showVPNIndicator.rawValue) as? Bool ?? true
         showFlagInMenuBar = defaults.object(forKey: Key.showFlagInMenuBar.rawValue) as? Bool ?? true
         mutedFlag = defaults.object(forKey: Key.mutedFlag.rawValue) as? Bool ?? false
-        namesReplaceAddresses = defaults.object(forKey: Key.namesReplaceAddresses.rawValue) as? Bool ?? true
+        nameDisplay = (defaults.string(forKey: Key.nameDisplay.rawValue)
+            .flatMap(NameDisplay.init(rawValue:))) ?? .name
         refreshMinutes = defaults.object(forKey: Key.refreshMinutes.rawValue) as? Int ?? 10
         labels = (defaults.data(forKey: Key.labels.rawValue))
             .flatMap { try? JSONDecoder().decode([AddressLabel].self, from: $0) } ?? []

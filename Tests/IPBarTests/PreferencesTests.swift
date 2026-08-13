@@ -17,7 +17,7 @@ struct PreferencesTests {
         let preferences = Preferences(defaults: scratchDefaults())
         #expect(preferences.displaySource == .publicAddress)
         #expect(preferences.showVPNIndicator)
-        #expect(preferences.namesReplaceAddresses)
+        #expect(preferences.nameDisplay == .name)
         #expect(preferences.refreshMinutes == 10)
         #expect(preferences.labels.isEmpty)
     }

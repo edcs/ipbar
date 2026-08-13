@@ -62,8 +62,17 @@ Use **Applies to** if you want a label to fire only for your public address, or 
 local ones. When several labels match, the longest prefix wins. A `/32` always beats a
 `/24`.
 
-Want to see both? Turn off *Show name instead of address* in General and you'll get
-`Office (203.0.113.42)`.
+**Named addresses show** in Settings decides what the menu bar does with an address that
+has a name:
+
+| Setting | Menu bar |
+| --- | --- |
+| Name | `Office` |
+| Name and address | `Office (203.0.113.42)` |
+| Address | `203.0.113.42` |
+
+It only affects the menu bar. The panel always shows both, with the name above the address
+it belongs to. An address with no name is just the address, whichever you pick.
 
 ## How VPN detection works
 
@@ -139,7 +148,7 @@ the address.
 ```sh
 make hooks           # enable the commit-message hook, once per clone
 swift build          # compile
-swift test           # 69 tests, no network needed
+swift test           # 75 tests, no network needed
 make icon            # redraw the icon and compile the .icns
 make app             # universal .app in dist/
 make run             # build and launch
