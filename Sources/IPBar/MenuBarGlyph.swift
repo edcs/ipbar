@@ -40,15 +40,18 @@ enum MenuBarGlyph {
                 hasColour = true
             }
         case .interface(let symbol):
-            if let glyph = symbolImage(symbol, height: height) { parts.append(glyph) }
+            if let glyph = symbolImage(symbol, inkHeight: symbolInkHeight) { parts.append(glyph) }
         }
 
-        if let vpnSymbol, let glyph = symbolImage(vpnSymbol, height: height) {
+        if let vpnSymbol, let glyph = symbolImage(vpnSymbol, inkHeight: symbolInkHeight) {
             parts.append(glyph)
         }
 
         guard !parts.isEmpty else { return nil }
-        guard let composed = compose(parts, height: height, colour: hasColour) else { return nil }
+        // Tall enough for the tallest part: a canvas fixed at the flag's height
+        // silently cropped the symbols.
+        let canvas = max(height, parts.map(\.size.height).max() ?? height)
+        guard let composed = compose(parts, height: canvas, colour: hasColour) else { return nil }
 
         cache[key] = composed
         return composed
@@ -56,12 +59,65 @@ enum MenuBarGlyph {
 
     static func invalidate() { cache.removeAll() }
 
-    private static func symbolImage(_ name: String, height: CGFloat) -> NSImage? {
-        let configuration = NSImage.SymbolConfiguration(pointSize: height, weight: .medium)
-        let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
-            .withSymbolConfiguration(configuration)
-        image?.isTemplate = true
+    /// Ink height for symbols, which is taller than the flag on purpose.
+    ///
+    /// A flag is a solid rectangle that fills its box; a symbol is line art
+    /// covering a fraction of its own. Matched by box they look mismatched, so
+    /// symbols are matched to the neighbouring system menu bar icons instead.
+    static let symbolInkHeight: CGFloat = 14
+
+    /// Scales a symbol so the mark it actually draws is `inkHeight` tall.
+    ///
+    /// Asking for a point size is not enough: at the same point size `wifi`
+    /// inks 10pt while `cable.connector` inks 13pt, and their boxes carry
+    /// different amounts of empty space. Measuring the ink and cropping to it
+    /// makes every symbol land at the same visual weight, and stops the box
+    /// padding from distorting the spacing between parts.
+    private static func symbolImage(_ name: String, inkHeight: CGFloat) -> NSImage? {
+        let reference: CGFloat = 48   // render large, measure, then scale down
+        guard let source = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: reference, weight: .medium)),
+            let tiff = source.tiffRepresentation,
+            let rep = NSBitmapImageRep(data: tiff) else { return nil }
+
+        guard let ink = inkBounds(rep, pointSize: source.size) else { return nil }
+
+        let scale = inkHeight / ink.height
+        let size = NSSize(width: (ink.width * scale).rounded(), height: inkHeight)
+
+        let image = NSImage(size: size)
+        image.lockFocus()
+        NSGraphicsContext.current?.imageInterpolation = .high
+        // Shift the ink to the origin, then scale it to the target height.
+        source.draw(in: NSRect(x: -ink.minX * scale, y: -ink.minY * scale,
+                               width: source.size.width * scale,
+                               height: source.size.height * scale))
+        image.unlockFocus()
+        image.isTemplate = true
         return image
+    }
+
+    /// The rectangle a symbol actually marks, in points, ignoring the empty
+    /// padding its box carries.
+    private static func inkBounds(_ rep: NSBitmapImageRep, pointSize: NSSize) -> NSRect? {
+        var minX = rep.pixelsWide, maxX = -1
+        var minY = rep.pixelsHigh, maxY = -1
+
+        for y in 0..<rep.pixelsHigh {
+            for x in 0..<rep.pixelsWide where (rep.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.05 {
+                minX = min(minX, x); maxX = max(maxX, x)
+                minY = min(minY, y); maxY = max(maxY, y)
+            }
+        }
+        guard maxX >= minX, maxY >= minY else { return nil }
+
+        let sx = pointSize.width / CGFloat(rep.pixelsWide)
+        let sy = pointSize.height / CGFloat(rep.pixelsHigh)
+        // Bitmap rows run top-down while the drawing space runs bottom-up.
+        return NSRect(x: CGFloat(minX) * sx,
+                      y: CGFloat(rep.pixelsHigh - 1 - maxY) * sy,
+                      width: CGFloat(maxX - minX + 1) * sx,
+                      height: CGFloat(maxY - minY + 1) * sy)
     }
 
     private static func compose(_ parts: [NSImage], height: CGFloat, colour: Bool) -> NSImage? {

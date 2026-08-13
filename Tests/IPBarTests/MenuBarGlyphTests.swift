@@ -23,7 +23,46 @@ struct MenuBarGlyphTests {
             qualifier: .country("gb"), vpnSymbol: "lock.fill", muted: false, store: store))
 
         #expect(both.size.width > flagOnly.size.width)
-        #expect(both.size.height == flagOnly.size.height)
+    }
+
+    @Test("the canvas fits the tallest part rather than cropping it")
+    func canvasFitsTallestPart() throws {
+        // A canvas fixed at the flag's height silently cropped symbols, whose
+        // boxes are taller than the flag at any comparable size.
+        let withSymbol = try #require(MenuBarGlyph.image(
+            qualifier: .interface("cable.connector"), vpnSymbol: nil, muted: false, store: store))
+        #expect(withSymbol.size.height >= MenuBarGlyph.symbolInkHeight)
+
+        // But never so tall that it crowds the menu bar.
+        let line = NSLayoutManager().defaultLineHeight(for: NSFont.menuBarFont(ofSize: 0))
+        #expect(withSymbol.size.height <= line)
+    }
+
+    @Test("symbols land at the same ink height regardless of shape", arguments: [
+        "wifi", "cable.connector", "antenna.radiowaves.left.and.right", "lock.fill"
+    ])
+    func consistentInkHeight(_ symbol: String) throws {
+        // At one point size these ink between 10pt and 13pt, which is why they
+        // are scaled by measured ink instead.
+        let image = try #require(MenuBarGlyph.image(
+            qualifier: .interface(symbol), vpnSymbol: nil, muted: false, store: store))
+        let rep = try #require(image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
+
+        var minY = rep.pixelsHigh, maxY = -1
+        for y in 0..<rep.pixelsHigh {
+            for x in 0..<rep.pixelsWide where (rep.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.1 {
+                minY = min(minY, y); maxY = max(maxY, y); break
+            }
+        }
+        let scale = CGFloat(rep.pixelsHigh) / image.size.height
+        let ink = CGFloat(maxY - minY + 1) / scale
+        #expect(abs(ink - MenuBarGlyph.symbolInkHeight) <= 1.0,
+                "\(symbol) inked \(ink), wanted \(MenuBarGlyph.symbolInkHeight)")
+    }
+
+    @Test("a symbol is taller than the flag, since line art reads smaller")
+    func symbolOutgrowsFlag() {
+        #expect(MenuBarGlyph.symbolInkHeight > FlagStore.menuBarFlagHeight)
     }
 
     @Test("a flag makes the image colour, not a template")
