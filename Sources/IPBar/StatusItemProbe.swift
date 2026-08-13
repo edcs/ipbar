@@ -11,7 +11,8 @@ enum StatusItemProbe {
     static func startIfRequested() {
         let mode = ProcessInfo.processInfo.environment["IPBAR_PROBE"]
         if mode == "panel" { renderPanel(); return }
-        guard mode == "1" else { return }
+        guard mode == "1" || mode == "item" else { return }
+        let snapshotting = mode == "item"
 
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(5))
@@ -21,6 +22,7 @@ enum StatusItemProbe {
                 for button in statusButtons(in: root) {
                     found += 1
                     report(button)
+                    if snapshotting { snapshot(button) }
                 }
             }
             if found == 0 { emit("no NSStatusBarButton found in \(NSApplication.shared.windows.count) windows") }
@@ -55,6 +57,38 @@ enum StatusItemProbe {
             emit("wrote \(path) (\(Int(image.size.width))x\(Int(image.size.height)))")
             exit(0)
         }
+    }
+
+    /// Snapshots the real status item button, which is the only honest way to
+    /// judge how the address, the flag and the label line up: everything else
+    /// is a reconstruction of what the button is presumed to do.
+    @MainActor
+    private static func snapshot(_ button: NSStatusBarButton) {
+        let bounds = button.bounds
+        guard bounds.width > 0, bounds.height > 0,
+              let rep = button.bitmapImageRepForCachingDisplay(in: bounds) else {
+            emit("could not snapshot the button")
+            return
+        }
+        button.cacheDisplay(in: bounds, to: rep)
+
+        // Composited onto a backdrop, since the button itself is transparent
+        // and the menu bar behind it is not.
+        let backdrop = NSImage(size: bounds.size)
+        backdrop.lockFocus()
+        (NSApplication.shared.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(srgbRed: 0.10, green: 0.11, blue: 0.13, alpha: 1)
+            : NSColor(srgbRed: 0.78, green: 0.86, blue: 0.97, alpha: 1)).setFill()
+        NSRect(origin: .zero, size: bounds.size).fill()
+        rep.draw(in: NSRect(origin: .zero, size: bounds.size))
+        backdrop.unlockFocus()
+
+        let path = ProcessInfo.processInfo.environment["IPBAR_ITEM_OUT"] ?? "/tmp/ipbar-item.png"
+        guard let tiff = backdrop.tiffRepresentation,
+              let flattened = NSBitmapImageRep(data: tiff),
+              let png = flattened.representation(using: .png, properties: [:]) else { return }
+        try? png.write(to: URL(fileURLWithPath: path))
+        emit("wrote \(path) (\(Int(bounds.width))x\(Int(bounds.height)))")
     }
 
     @MainActor

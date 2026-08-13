@@ -37,7 +37,7 @@ enum MenuBarGlyph {
         if let cached = cache[key] { return cached }
 
         let height = FlagStore.menuBarFlagHeight
-        var parts: [NSImage] = []
+        var parts: [Part] = []
         var hasColour = false
 
         switch qualifier {
@@ -45,11 +45,13 @@ enum MenuBarGlyph {
             break
         case .country(let code):
             if let flag = store.badge(for: code, muted: muted, height: height) {
-                parts.append(flag)
+                parts.append(Part(image: flag, baseline: nil))
                 hasColour = true
             }
         case .interface(let symbol):
-            if let glyph = symbolImage(symbol, inkHeight: symbolInkHeight) { parts.append(glyph) }
+            if let glyph = symbolImage(symbol, inkHeight: symbolInkHeight) {
+                parts.append(Part(image: glyph, baseline: nil))
+            }
         }
 
         if let vpnLabel, let text = textImage(vpnLabel) {
@@ -57,9 +59,10 @@ enum MenuBarGlyph {
         }
 
         guard !parts.isEmpty else { return nil }
-        // Tall enough for the tallest part: a canvas fixed at the flag's height
-        // silently cropped the symbols.
-        let canvas = max(height, parts.map(\.size.height).max() ?? height)
+        // Tall enough for the tallest part, plus slack so a baseline-aligned
+        // label is not clipped. Growing it symmetrically leaves the centre
+        // where it was, and the button centres the whole image anyway.
+        let canvas = max(height, parts.map(\.image.size.height).max() ?? height) + 2
         guard let composed = compose(parts, height: canvas, colour: hasColour, dark: dark) else { return nil }
 
         cache[key] = composed
@@ -132,34 +135,62 @@ enum MenuBarGlyph {
                       height: CGFloat(maxY - minY + 1) * sy)
     }
 
-    /// Renders text as an alpha mask, matching the menu bar font so it reads as
-    /// part of the same line as the address.
+    /// Two points below the menu bar font.
+    ///
+    /// At full size the label competed with the address instead of annotating
+    /// it, and stood taller than the flag beside it. This brings its ink down
+    /// to about the flag's height.
+    private static var labelFontSize: CGFloat { NSFont.menuBarFont(ofSize: 0).pointSize - 2 }
+
+    /// Renders text as an alpha mask, cropped to the marks it actually makes.
+    ///
+    /// Cropping matters for alignment: a text image carries the font's
+    /// ascender and descender whether or not the glyphs reach them, so
+    /// centring the box leaves the visible text sitting off centre. Every
+    /// other part is measured by its ink, and this now is too.
     ///
     /// Drawn in black with no colour of its own. Without a flag the whole
     /// composite stays a template and the system tints it. With one, the
     /// composite has to be colour, so `compose` tints this to match the menu
     /// bar's own text for the current appearance.
-    private static func textImage(_ text: String) -> NSImage? {
-        let font = NSFont.menuBarFont(ofSize: 0)
+    private static func textImage(_ text: String) -> Part? {
+        let font = NSFont.menuBarFont(ofSize: labelFontSize)
         let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.black]
         let string = text as NSString
         let size = string.size(withAttributes: attributes)
         guard size.width > 0, size.height > 0 else { return nil }
 
-        let image = NSImage(size: NSSize(width: size.width.rounded(.up),
+        let boxed = NSImage(size: NSSize(width: size.width.rounded(.up),
                                          height: size.height.rounded(.up)))
-        image.lockFocus()
+        boxed.lockFocus()
         string.draw(at: .zero, withAttributes: attributes)
-        image.unlockFocus()
-        image.isTemplate = true
-        return image
+        boxed.unlockFocus()
+
+        boxed.isTemplate = true
+        // Deliberately not cropped vertically. Text drawn at the origin puts
+        // its baseline exactly one descender above the box's bottom edge, and
+        // that exactness is what the alignment depends on. Cropping to ink
+        // would trim an unknown amount of that away and the baseline with it;
+        // the leftover transparent margin costs nothing, because the part is
+        // placed by its baseline rather than by its box.
+        return Part(image: boxed, baseline: abs(font.descender))
     }
 
-    private static func compose(_ parts: [NSImage], height: CGFloat,
+
+    /// One element of the composite.
+    ///
+    /// `baseline` is the distance from the image's bottom edge to the text
+    /// baseline, for parts that are text. Marks have none and are centred.
+    private struct Part {
+        let image: NSImage
+        let baseline: CGFloat?
+    }
+
+    private static func compose(_ parts: [Part], height: CGFloat,
                                 colour: Bool, dark: Bool) -> NSImage? {
         let inner: CGFloat = 4
         let lead = FlagStore.menuBarFlagGap
-        let width = lead + parts.map(\.size.width).reduce(0, +) + inner * CGFloat(parts.count - 1)
+        let width = lead + parts.map(\.image.size.width).reduce(0, +) + inner * CGFloat(parts.count - 1)
 
         let size = NSSize(width: width.rounded(), height: height)
         let scale: CGFloat = 2
@@ -175,21 +206,37 @@ enum MenuBarGlyph {
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
         NSGraphicsContext.current?.imageInterpolation = .high
 
+        // The button centres both the title and the image, so the address's
+        // cap centre lands on the canvas centre. Its baseline therefore sits
+        // half a cap height below that, and text here has to meet it: two sizes
+        // of type on one line share a baseline, they do not share a centre.
+        let capHeight = NSFont.menuBarFont(ofSize: 0).capHeight
+        let addressBaseline = height / 2 - capHeight / 2
+
         var x = lead
         for part in parts {
-            let box = NSRect(x: x, y: ((height - part.size.height) / 2).rounded(),
-                             width: part.size.width, height: part.size.height)
-            part.draw(in: box)
+            let y: CGFloat
+            if let baseline = part.baseline {
+                // Rounded to half a point, not a whole one: the menu bar is
+                // Retina, so half points are addressable and whole-point
+                // rounding was leaving the baseline a pixel out.
+                y = ((addressBaseline - baseline) * 2).rounded() / 2
+            } else {
+                y = ((height - part.image.size.height)).rounded() / 2
+            }
+            let box = NSRect(x: x, y: y,
+                             width: part.image.size.width, height: part.image.size.height)
+            part.image.draw(in: box)
 
             // A template drawn into a colour composite arrives black, which is
             // invisible on a dark menu bar. A flag forces the composite to
             // colour, so anything template beside it is tinted to whatever the
             // menu bar is currently using for its own text.
-            if colour, part.isTemplate {
+            if colour, part.image.isTemplate {
                 (dark ? NSColor.white : NSColor.black).set()
                 box.fill(using: .sourceAtop)
             }
-            x += part.size.width + inner
+            x += part.image.size.width + inner
         }
         NSGraphicsContext.restoreGraphicsState()
 
