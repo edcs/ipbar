@@ -10,9 +10,32 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+
+      # Printed so a failure here is diagnosable from the log alone, without
+      # needing to reproduce on a matching toolchain.
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          echo "SDKs: $(xcodebuild -showsdks | grep macosx || true)"
+
       - name: Build
         run: swift build
+
       - name: Test
         run: swift test
+
+      # Split from the bundle step: the icon is generated from source on a
+      # clean checkout, so it is the first thing that can fail.
+      - name: Generate icon
+        run: make icon
+
       - name: Assemble app bundle
         run: make app
+
+      - name: Verify bundle
+        run: |
+          test -f dist/IPBar.app/Contents/MacOS/IPBar
+          test -f dist/IPBar.app/Contents/Resources/AppIcon.icns
+          lipo -archs dist/IPBar.app/Contents/MacOS/IPBar
+          plutil -lint dist/IPBar.app/Contents/Info.plist
