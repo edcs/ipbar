@@ -115,9 +115,11 @@ final class NetworkModel {
         }
     }
 
-    var menuBarSymbol: String? {
+    /// Trails the flag as plain text rather than a padlock. A lock beside a
+    /// flag is a lot of iconography for one fact, and "(VPN)" says it outright.
+    var menuBarVPNLabel: String? {
         guard preferences.showVPNIndicator, vpn.isActive else { return nil }
-        return vpn.mode == .full ? "lock.fill" : "lock.open.fill"
+        return "(VPN)"
     }
 
     /// What trails the address in the menu bar.

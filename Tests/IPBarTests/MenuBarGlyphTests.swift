@@ -12,15 +12,15 @@ struct MenuBarGlyphTests {
         return FlagStore(directory: root.appendingPathComponent("Resources/Flags"))
     }
 
-    @Test("a flag and a VPN symbol both survive")
+    @Test("a flag and the VPN label both survive")
     func flagAndVPNCoexist() throws {
         // The status item button holds one image, so handing it a flag and a
-        // symbol separately meant the flag was dropped exactly when the exit
-        // country mattered most. Composing them keeps both.
+        // second mark separately meant the flag was dropped exactly when the
+        // exit country mattered most. Composing them keeps both.
         let flagOnly = try #require(MenuBarGlyph.image(
-            qualifier: .country("gb"), vpnSymbol: nil, muted: false, store: store))
+            qualifier: .country("gb"), vpnLabel: nil, muted: false, store: store))
         let both = try #require(MenuBarGlyph.image(
-            qualifier: .country("gb"), vpnSymbol: "lock.fill", muted: false, store: store))
+            qualifier: .country("gb"), vpnLabel: "(VPN)", muted: false, store: store))
 
         #expect(both.size.width > flagOnly.size.width)
     }
@@ -30,7 +30,7 @@ struct MenuBarGlyphTests {
         // A canvas fixed at the flag's height silently cropped symbols, whose
         // boxes are taller than the flag at any comparable size.
         let withSymbol = try #require(MenuBarGlyph.image(
-            qualifier: .interface(MenuBarGlyph.localNetworkSymbol), vpnSymbol: nil, muted: false, store: store))
+            qualifier: .interface(MenuBarGlyph.localNetworkSymbol), vpnLabel: nil, muted: false, store: store))
         #expect(withSymbol.size.height >= MenuBarGlyph.symbolInkHeight)
 
         // But never so tall that it crowds the menu bar.
@@ -45,7 +45,7 @@ struct MenuBarGlyphTests {
         // At one point size these ink between 10pt and 13pt, which is why they
         // are scaled by measured ink instead.
         let image = try #require(MenuBarGlyph.image(
-            qualifier: .interface(symbol), vpnSymbol: nil, muted: false, store: store))
+            qualifier: .interface(symbol), vpnLabel: nil, muted: false, store: store))
         let rep = try #require(image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
 
         var minY = rep.pixelsHigh, maxY = -1
@@ -68,37 +68,56 @@ struct MenuBarGlyphTests {
     @Test("a flag makes the image colour, not a template")
     func flagKeepsColour() throws {
         let image = try #require(MenuBarGlyph.image(
-            qualifier: .country("gb"), vpnSymbol: nil, muted: false, store: store))
+            qualifier: .country("gb"), vpnLabel: nil, muted: false, store: store))
         #expect(image.isTemplate == false)
+    }
+
+    @Test("the VPN label is drawn, not dropped")
+    func vpnLabelIsDrawn() throws {
+        let plain = try #require(MenuBarGlyph.image(
+            qualifier: .country("gb"), vpnLabel: nil, muted: false, store: store))
+        let labelled = try #require(MenuBarGlyph.image(
+            qualifier: .country("gb"), vpnLabel: "(VPN)", muted: false, store: store))
+        // Text is wider than a padlock glyph was, and must actually take space.
+        #expect(labelled.size.width > plain.size.width + 10)
+    }
+
+    @Test("the VPN label alone still shows without a flag")
+    func vpnLabelWithoutFlag() throws {
+        let image = try #require(MenuBarGlyph.image(
+            qualifier: .none, vpnLabel: "(VPN)", muted: false, store: store))
+        #expect(image.size.width > 0)
+        // No flag means nothing forces colour, so the system can tint it.
+        #expect(image.isTemplate)
     }
 
     @Test("symbols alone stay a template so the system tints them")
     func symbolsStayTemplate() throws {
         let interface = try #require(MenuBarGlyph.image(
-            qualifier: .interface(MenuBarGlyph.localNetworkSymbol), vpnSymbol: nil, muted: false, store: store))
+            qualifier: .interface(MenuBarGlyph.localNetworkSymbol), vpnLabel: nil, muted: false, store: store))
         #expect(interface.isTemplate)
 
         let vpnOnly = try #require(MenuBarGlyph.image(
-            qualifier: .none, vpnSymbol: "lock.fill", muted: false, store: store))
+            qualifier: .none, vpnLabel: "(VPN)", muted: false, store: store))
         #expect(vpnOnly.isTemplate)
     }
 
     @Test("nothing to show means no image at all")
     func nothingToShow() {
-        #expect(MenuBarGlyph.image(qualifier: .none, vpnSymbol: nil,
+        #expect(MenuBarGlyph.image(qualifier: .none, vpnLabel: nil,
                                    muted: false, store: store) == nil)
     }
 
     @Test("an unknown country falls back to nothing rather than a blank gap")
     func unknownCountry() {
-        #expect(MenuBarGlyph.image(qualifier: .country("zz"), vpnSymbol: nil,
+        #expect(MenuBarGlyph.image(qualifier: .country("zz"), vpnLabel: nil,
                                    muted: false, store: store) == nil)
     }
 
     @Test("the leading gap is included once, not per part")
     func gapCountedOnce() throws {
         let image = try #require(MenuBarGlyph.image(
-            qualifier: .country("gb"), vpnSymbol: nil, muted: false, store: store))
+            qualifier: .country("gb"), vpnLabel: nil, muted: false, store: store))
         let flag = try #require(store.badge(for: "gb", muted: false,
                                             height: FlagStore.menuBarFlagHeight))
         #expect(image.size.width == (flag.size.width + FlagStore.menuBarFlagGap).rounded())
@@ -107,7 +126,7 @@ struct MenuBarGlyphTests {
     @Test("the leading edge is transparent so the gap really is a gap")
     func leadingEdgeIsClear() throws {
         let image = try #require(MenuBarGlyph.image(
-            qualifier: .country("gb"), vpnSymbol: nil, muted: false, store: store))
+            qualifier: .country("gb"), vpnLabel: nil, muted: false, store: store))
         let rep = try #require(image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
         let inGap = try #require(rep.colorAt(x: 1, y: rep.pixelsHigh / 2))
         #expect(inGap.alphaComponent == 0)

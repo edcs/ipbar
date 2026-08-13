@@ -9,8 +9,8 @@ head every time. Tell IPBar it's called "Office" and the menu bar says `Office`.
 
 - **Named addresses.** Map an address or CIDR block to a name. The most specific prefix
   wins, so a `/32` for your static IP beats the `/24` it sits in.
-- **VPN state.** See whether your traffic is going through a tunnel, and whether that
-  tunnel is full or split.
+- **VPN state.** The menu bar reads `(VPN)` after the flag while a tunnel is up, and the
+  panel says whether it carries all your traffic or only some of it.
 - Public IPv4 and IPv6, plus every local interface. Click any address to copy it.
 - **Country flag** for your public address, with a muted option if you'd rather it sat
   quietly. Useful for checking which country your VPN is exiting from.
@@ -120,7 +120,7 @@ the address.
 ```sh
 make hooks           # enable the commit-message hook, once per clone
 swift build          # compile
-swift test           # 59 tests, no network needed
+swift test           # 61 tests, no network needed
 make icon            # redraw the icon and compile the .icns
 make app             # universal .app in dist/
 make run             # build and launch

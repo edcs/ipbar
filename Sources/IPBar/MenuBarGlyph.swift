@@ -31,9 +31,9 @@ enum MenuBarGlyph {
 
     private static var cache: [String: NSImage] = [:]
 
-    static func image(qualifier: Qualifier, vpnSymbol: String?, muted: Bool,
+    static func image(qualifier: Qualifier, vpnLabel: String?, muted: Bool,
                       store: FlagStore = .shared) -> NSImage? {
-        let key = "\(ObjectIdentifier(store))|\(qualifier)|\(vpnSymbol ?? "-")|\(muted)"
+        let key = "\(ObjectIdentifier(store))|\(qualifier)|\(vpnLabel ?? "-")|\(muted)"
         if let cached = cache[key] { return cached }
 
         let height = FlagStore.menuBarFlagHeight
@@ -52,8 +52,8 @@ enum MenuBarGlyph {
             if let glyph = symbolImage(symbol, inkHeight: symbolInkHeight) { parts.append(glyph) }
         }
 
-        if let vpnSymbol, let glyph = symbolImage(vpnSymbol, inkHeight: symbolInkHeight) {
-            parts.append(glyph)
+        if let vpnLabel, let text = textImage(vpnLabel) {
+            parts.append(text)
         }
 
         guard !parts.isEmpty else { return nil }
@@ -77,6 +77,20 @@ enum MenuBarGlyph {
     /// tower over the address. Derived from the flag so the two stay in step
     /// when the menu bar text size changes.
     nonisolated static var symbolInkHeight: CGFloat { FlagStore.menuBarFlagHeight + 1 }
+
+    /// The colour the menu bar is drawing its own text in right now.
+    ///
+    /// Resolved against the current appearance rather than assumed, so text
+    /// baked into a colour composite still flips with light and dark. The
+    /// cache is cleared on appearance changes so this is re-read.
+    private static func menuBarInk() -> NSColor {
+        let appearance = NSApplication.shared.effectiveAppearance
+        var resolved = NSColor.labelColor
+        appearance.performAsCurrentDrawingAppearance {
+            resolved = NSColor.labelColor.usingColorSpace(.deviceRGB) ?? .labelColor
+        }
+        return resolved
+    }
 
     /// Scales a symbol so the mark it actually draws is `inkHeight` tall.
     ///
@@ -132,6 +146,28 @@ enum MenuBarGlyph {
                       height: CGFloat(maxY - minY + 1) * sy)
     }
 
+    /// Renders text as an alpha mask, matching the menu bar font so it reads as
+    /// part of the same line as the address.
+    ///
+    /// Drawn in black with no colour of its own. Without a flag the whole
+    /// composite stays a template and the system tints it; with one, `compose`
+    /// tints it to match the surrounding text.
+    private static func textImage(_ text: String) -> NSImage? {
+        let font = NSFont.menuBarFont(ofSize: 0)
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.black]
+        let string = text as NSString
+        let size = string.size(withAttributes: attributes)
+        guard size.width > 0, size.height > 0 else { return nil }
+
+        let image = NSImage(size: NSSize(width: size.width.rounded(.up),
+                                         height: size.height.rounded(.up)))
+        image.lockFocus()
+        string.draw(at: .zero, withAttributes: attributes)
+        image.unlockFocus()
+        image.isTemplate = true
+        return image
+    }
+
     private static func compose(_ parts: [NSImage], height: CGFloat, colour: Bool) -> NSImage? {
         let inner: CGFloat = 4
         let lead = FlagStore.menuBarFlagGap
@@ -158,10 +194,11 @@ enum MenuBarGlyph {
             part.draw(in: box)
 
             // A template drawn into a colour composite arrives black, which is
-            // invisible on a dark menu bar. Symbols alongside a flag are tinted
-            // to a mid blue that holds up against a light or a dark bar.
+            // invisible on a dark menu bar. A flag forces the composite to
+            // colour, so anything template beside it is tinted to whatever the
+            // menu bar is currently using for its own text.
             if colour, part.isTemplate {
-                NSColor(srgbRed: 0.36, green: 0.72, blue: 0.92, alpha: 1).set()
+                menuBarInk().set()
                 box.fill(using: .sourceAtop)
             }
             x += part.size.width + inner
