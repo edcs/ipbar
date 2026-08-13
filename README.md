@@ -36,7 +36,15 @@ item. Your settings are stored under `dev.ecs.IPBar`.
 
 ## Naming an address
 
-Go to Settings → **Names** and click `+`. The pattern field accepts:
+The quickest way is from the panel itself. Hover an address and click **Name**, or
+right-click it and choose **Name This Address**. Type the name, press Return, and you are
+done. You never have to read the address off the screen and type it back in.
+
+Right-click also offers **Rename** and **Remove Name**. Remove Name only appears when the
+address has its own name, since a name inherited from a wider block belongs to that block.
+
+For blocks and addresses you are not currently on, go to Settings → **Names** and click
+`+`. The pattern field accepts:
 
 | Pattern | Matches |
 | --- | --- |
@@ -101,7 +109,7 @@ the address.
 ```sh
 make hooks           # enable the commit-message hook, once per clone
 swift build          # compile
-swift test           # 43 tests, no network needed
+swift test           # 53 tests, no network needed
 make icon            # redraw the icon and compile the .icns
 make app             # universal .app in dist/
 make run             # build and launch

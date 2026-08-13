@@ -16,6 +16,10 @@ struct MenuContent: View {
 
     @State private var copied: String?
     @State private var resetTask: Task<Void, Never>?
+    @State private var hovered: String?
+    @State private var editing: String?
+    @State private var draftName = ""
+    @FocusState private var nameFieldFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -126,12 +130,25 @@ struct MenuContent: View {
 
     // MARK: - Address row
 
-    /// A named address puts the name first and demotes the address, because
-    /// naming is the point of the app. It is the only place colour appears.
     private func row(kind: String, address: String,
                      scope: AddressLabel.Scope, inUse: Bool = false) -> some View {
+        Group {
+            if editing == address {
+                nameEditor(address: address, scope: scope)
+            } else {
+                addressRow(kind: kind, address: address, scope: scope, inUse: inUse)
+            }
+        }
+        .padding(.horizontal, 4)
+    }
+
+    /// A named address puts the name first and demotes the address, because
+    /// naming is the point of the app. It is the only place colour appears.
+    private func addressRow(kind: String, address: String,
+                            scope: AddressLabel.Scope, inUse: Bool) -> some View {
         let name = model.name(for: address, scope: scope)
         let justCopied = copied == address
+        let isHovered = hovered == address
 
         return Button {
             copy(address)
@@ -151,7 +168,8 @@ struct MenuContent: View {
 
                     Spacer(minLength: 4)
 
-                    if name != nil {
+                    // Hidden while hovering, where the naming button sits.
+                    if name != nil, !isHovered {
                         Text(kind).font(.system(size: 10)).foregroundStyle(.tertiary)
                     }
                 }
@@ -183,9 +201,68 @@ struct MenuContent: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(RowButtonStyle())
-        .padding(.horizontal, 4)
+        // Sits above the row rather than inside it: a control nested in a
+        // Button's label never receives the click.
+        .overlay(alignment: .topTrailing) {
+            if isHovered {
+                Button(name == nil ? "Name" : "Rename") {
+                    beginNaming(address, existing: name)
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(Palette.accent)
+                .padding(.trailing, 10)
+                .padding(.top, 6)
+            }
+        }
+        .onHover { inside in
+            if inside { hovered = address } else if hovered == address { hovered = nil }
+        }
+        .contextMenu {
+            Button("Copy Address") { copy(address) }
+            Button(name == nil ? "Name This Address…" : "Rename…") {
+                beginNaming(address, existing: name)
+            }
+            if hasOwnLabel(address, scope: scope) {
+                Divider()
+                Button("Remove Name") { removeName(address, scope: scope) }
+            }
+        }
         .help("Copy \(address)")
         .accessibilityLabel("\(name ?? kind), \(address). Click to copy.")
+    }
+
+    /// Renaming in place, so the address never has to be typed out. The whole
+    /// point of a name is not having to remember the number behind it.
+    private func nameEditor(address: String, scope: AddressLabel.Scope) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 6) {
+                // Left at the default colour: amber marks a name that is set,
+                // and a field being typed into is not one yet.
+                TextField("Name this address", text: $draftName)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12, weight: .semibold))
+                    .focused($nameFieldFocused)
+                    .onSubmit { commitName(address: address, scope: scope) }
+                    .onExitCommand { cancelNaming() }
+
+                Text("↩ save · esc cancel")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize()
+            }
+
+            Text(address)
+                .font(.system(size: 12.5, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
+        .task { nameFieldFocused = true }
     }
 
     private func badge(_ text: String) -> some View {
@@ -281,6 +358,29 @@ struct MenuContent: View {
     }
 
     // MARK: - Actions
+
+    private func beginNaming(_ address: String, existing: String?) {
+        draftName = existing ?? ""
+        editing = address
+    }
+
+    private func cancelNaming() {
+        editing = nil
+        draftName = ""
+    }
+
+    private func commitName(address: String, scope: AddressLabel.Scope) {
+        preferences.labels.setName(draftName, for: address, scope: scope)
+        cancelNaming()
+    }
+
+    private func hasOwnLabel(_ address: String, scope: AddressLabel.Scope) -> Bool {
+        preferences.labels.hasOwnLabel(for: address, scope: scope)
+    }
+
+    private func removeName(_ address: String, scope: AddressLabel.Scope) {
+        preferences.labels.removeLabel(for: address, scope: scope)
+    }
 
     private func copy(_ address: String) {
         NSPasteboard.general.clearContents()
