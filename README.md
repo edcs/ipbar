@@ -7,6 +7,16 @@ A macOS menu bar app that shows your IP address, and lets you give addresses nam
 If you have a static IP, `203.0.113.42` isn't information. It's a lookup you do in your
 head every time. Tell IPBar it's called "Office" and the menu bar says `Office`.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Docs/menubar-dark.png">
+  <img alt="The menu bar reading Home, with a UK flag" src="Docs/menubar-light.png" width="132">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Docs/panel-dark.png">
+  <img alt="The panel, showing a named public address, both public addresses, and the addresses on this Mac" src="Docs/panel-light.png" width="358">
+</picture>
+
 - **Named addresses.** Map an address or CIDR block to a name. The most specific prefix
   wins, so a `/32` for your static IP beats the `/24` it sits in.
 - **VPN state.** The menu bar shows a `VPN` badge after the flag while a tunnel is up, and
@@ -188,7 +198,22 @@ Sources live in `Sources/IPBar/`.
 | `Tools/setup-signing.sh` | one-time certificate and notarization setup |
 | `Tools/check-commits.sh` | runs the commit-msg hook over a range, used by CI |
 | `Tools/release-notes.sh` | turns commit subjects into release notes |
+| `Docs/` | the README screenshots, rendered by the app itself |
 | `.githooks/commit-msg` | the Conventional Commits rule, shared by hook and CI |
+
+## The screenshots
+
+`Docs/` is written by the app rather than captured by hand:
+
+```sh
+make screenshots
+```
+
+It draws the real views through `ImageRenderer`, once per appearance, so the light and dark
+versions cannot drift out of step with each other or with the code. The addresses in them
+are the ones reserved for documentation, [RFC 5737](https://www.rfc-editor.org/rfc/rfc5737)
+and [RFC 3849](https://www.rfc-editor.org/rfc/rfc3849), so nobody has to publish where they
+live to update a screenshot.
 
 ## The icon
 

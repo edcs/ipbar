@@ -165,6 +165,29 @@ final class NetworkModel {
         }
     }
 
+    /// Fills the model with the addresses reserved for documentation, so the
+    /// screenshots in the README show what the app looks like without
+    /// publishing whoever generated them.
+    ///
+    /// 203.0.113.0/24 is RFC 5737's documentation range and 2001:db8::/32 is
+    /// RFC 3849's. Neither routes anywhere.
+    func loadSampleData() {
+        interfaces = [
+            NetworkInterface(bsdName: "en0", address: "192.168.1.77", family: .ipv4,
+                             kind: .wifi, isLinkLocal: false, friendlyName: "Wi-Fi"),
+            NetworkInterface(bsdName: "en0", address: "2001:db8:1738:0:1cc1:3c0c:9659:e927",
+                             family: .ipv6, kind: .wifi, isLinkLocal: false, friendlyName: "Wi-Fi"),
+            NetworkInterface(bsdName: "en0", address: "2001:db8:1738:0:870:ca09:920c:ef6c",
+                             family: .ipv6, kind: .wifi, isLinkLocal: false, friendlyName: "Wi-Fi")
+        ]
+        publicIPv4 = "203.0.113.42"
+        publicIPv6 = "2001:db8:1738:0:870:ca09:920c:ef6c"
+        country = "GB"
+        vpn = VPNState()
+        lastUpdated = Date()
+        isRefreshing = false
+    }
+
     // MARK: - Lifecycle
 
     func start() {

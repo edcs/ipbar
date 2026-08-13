@@ -36,14 +36,44 @@ enum StatusItemProbe {
         Task { @MainActor in
             let preferences = Preferences()
             let model = NetworkModel(preferences: preferences)
-            model.start()
-            try? await Task.sleep(for: .seconds(6))   // let the lookups land
+
+            // Screenshots run on made-up addresses. A README is public, and the
+            // person generating one should not have to publish where they live.
+            if ProcessInfo.processInfo.environment["IPBAR_PANEL_SAMPLE"] == "1" {
+                model.loadSampleData()
+                preferences.labels = [AddressLabel(pattern: "203.0.113.42", name: "Home",
+                                                   scope: .publicAddress)]
+                preferences.nameDisplay = .name
+            } else {
+                model.start()
+                try? await Task.sleep(for: .seconds(6))   // let the lookups land
+            }
+
+            // IPBAR_PANEL_SCHEME=dark|light renders the panel as it looks in
+            // that appearance, whatever the machine is currently set to, so
+            // both can be captured in one go.
+            let scheme: ColorScheme? = switch ProcessInfo.processInfo.environment["IPBAR_PANEL_SCHEME"] {
+            case "dark": .dark
+            case "light": .light
+            default: nil
+            }
+            let backdrop: Color = switch scheme {
+            case .dark: Color(nsColor: NSColor(srgbRed: 0.13, green: 0.13, blue: 0.14, alpha: 1))
+            case .light: Color(nsColor: NSColor(srgbRed: 0.96, green: 0.96, blue: 0.97, alpha: 1))
+            default: Color(nsColor: .windowBackgroundColor)
+            }
 
             let renderer = ImageRenderer(content:
                 MenuContent(model: model, preferences: preferences)
-                    .background(Color(nsColor: .windowBackgroundColor))
+                    .background(backdrop)
+                    .environment(\.colorScheme, scheme ?? .light)
             )
             renderer.scale = 2
+
+            if let stripPath = ProcessInfo.processInfo.environment["IPBAR_STRIP_OUT"] {
+                writeMenuBarStrip(model: model, preferences: preferences,
+                                  dark: scheme == .dark, to: stripPath)
+            }
 
             let path = ProcessInfo.processInfo.environment["IPBAR_PANEL_OUT"] ?? "/tmp/ipbar-panel.png"
             guard let image = renderer.nsImage,
@@ -89,6 +119,53 @@ enum StatusItemProbe {
               let png = flattened.representation(using: .png, properties: [:]) else { return }
         try? png.write(to: URL(fileURLWithPath: path))
         emit("wrote \(path) (\(Int(bounds.width))x\(Int(bounds.height)))")
+    }
+
+    /// Draws the menu bar item as the bar itself would: the title, then the
+    /// trailing image, both centred in a 22pt bar.
+    @MainActor
+    private static func writeMenuBarStrip(model: NetworkModel, preferences: Preferences,
+                                          dark: Bool, to path: String) {
+        let font = NSFont.menuBarFont(ofSize: 0)
+        let title = model.menuBarText as NSString
+        let glyph = MenuBarGlyph.image(qualifier: model.menuBarQualifier,
+                                       vpnLabel: model.menuBarVPNLabel,
+                                       muted: preferences.mutedFlag, dark: dark)
+
+        let ink = dark ? NSColor.white : NSColor.black
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: ink]
+        let titleSize = title.size(withAttributes: attributes)
+
+        let padding: CGFloat = 14
+        let height: CGFloat = 24
+        let width = (padding * 2 + titleSize.width + (glyph?.size.width ?? 0)).rounded(.up)
+
+        let scale: CGFloat = 3
+        guard let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: Int(width * scale), pixelsHigh: Int(height * scale),
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return }
+        rep.size = NSSize(width: width, height: height)
+
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        (dark ? NSColor(srgbRed: 0.09, green: 0.09, blue: 0.10, alpha: 1)
+              : NSColor(srgbRed: 0.93, green: 0.93, blue: 0.94, alpha: 1)).setFill()
+        NSRect(x: 0, y: 0, width: width, height: height).fill()
+
+        title.draw(at: NSPoint(x: padding, y: (height - titleSize.height) / 2),
+                   withAttributes: attributes)
+        if let glyph {
+            glyph.draw(in: NSRect(x: padding + titleSize.width,
+                                  y: ((height - glyph.size.height) / 2).rounded(),
+                                  width: glyph.size.width, height: glyph.size.height))
+        }
+        NSGraphicsContext.restoreGraphicsState()
+
+        if let png = rep.representation(using: .png, properties: [:]) {
+            try? png.write(to: URL(fileURLWithPath: path))
+            emit("wrote \(path)")
+        }
     }
 
     @MainActor

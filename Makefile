@@ -11,7 +11,7 @@ X86_BIN   := .build/x86_64-apple-macosx/release/$(APP_NAME)
 SIGN_ID        ?=
 NOTARY_PROFILE ?= ipbar-notary
 
-.PHONY: all app debug run clean sign notarize release icon hooks
+.PHONY: all app debug run clean sign notarize release icon hooks screenshots
 
 all: app
 
@@ -29,6 +29,15 @@ icon:
 	swift Tools/GenerateIcon.swift
 	iconutil -c icns Resources/AppIcon.iconset -o Resources/AppIcon.icns
 	@echo "wrote Resources/AppIcon.icns"
+
+## Redraw the README screenshots, in both appearances
+screenshots: app
+	@mkdir -p Docs
+	@for scheme in light dark; do \
+		IPBAR_PROBE=panel IPBAR_PANEL_SAMPLE=1 IPBAR_PANEL_SCHEME=$$scheme \
+		IPBAR_PANEL_OUT=Docs/panel-$$scheme.png IPBAR_STRIP_OUT=Docs/menubar-$$scheme.png \
+		$(DIST)/$(BUNDLE)/Contents/MacOS/$(APP_NAME); \
+	done
 
 ## Universal (arm64 + x86_64) .app bundle in dist/
 ##
