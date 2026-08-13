@@ -59,12 +59,15 @@ enum MenuBarGlyph {
 
     static func invalidate() { cache.removeAll() }
 
-    /// Ink height for symbols, which is taller than the flag on purpose.
+    /// Ink height for symbols: one point above the flag, on purpose.
     ///
-    /// A flag is a solid rectangle that fills its box; a symbol is line art
-    /// covering a fraction of its own. Matched by box they look mismatched, so
-    /// symbols are matched to the neighbouring system menu bar icons instead.
-    static let symbolInkHeight: CGFloat = 14
+    /// A flag is a solid rectangle that fills its box, a symbol is line art
+    /// covering a fraction of its own, so matched by box they look mismatched
+    /// and a symbol needs slightly more height to carry the same weight. Only
+    /// slightly, though: matching the neighbouring system icons instead made it
+    /// tower over the address. Derived from the flag so the two stay in step
+    /// when the menu bar text size changes.
+    static var symbolInkHeight: CGFloat { FlagStore.menuBarFlagHeight + 1 }
 
     /// Scales a symbol so the mark it actually draws is `inkHeight` tall.
     ///
