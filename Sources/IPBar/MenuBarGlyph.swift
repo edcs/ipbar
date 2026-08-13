@@ -54,8 +54,8 @@ enum MenuBarGlyph {
             }
         }
 
-        if let vpnLabel, let text = textImage(vpnLabel) {
-            parts.append(text)
+        if let vpnLabel, let badge = badgeImage(vpnLabel, height: height) {
+            parts.append(badge)
         }
 
         guard !parts.isEmpty else { return nil }
@@ -135,52 +135,56 @@ enum MenuBarGlyph {
                       height: CGFloat(maxY - minY + 1) * sy)
     }
 
-    /// Two points below the menu bar font.
+    /// An outlined badge, after the one iOS puts in its status bar.
     ///
-    /// At full size the label competed with the address instead of annotating
-    /// it, and stood taller than the flag beside it. This brings its ink down
-    /// to about the flag's height.
-    private static var labelFontSize: CGFloat { NSFont.menuBarFont(ofSize: 0).pointSize - 2 }
-
-    /// Renders text as an alpha mask, cropped to the marks it actually makes.
-    ///
-    /// Cropping matters for alignment: a text image carries the font's
-    /// ascender and descender whether or not the glyphs reach them, so
-    /// centring the box leaves the visible text sitting off centre. Every
-    /// other part is measured by its ink, and this now is too.
-    ///
-    /// Drawn in black with no colour of its own. Without a flag the whole
-    /// composite stays a template and the system tints it. With one, the
-    /// composite has to be colour, so `compose` tints this to match the menu
-    /// bar's own text for the current appearance.
-    private static func textImage(_ text: String) -> Part? {
-        let font = NSFont.menuBarFont(ofSize: labelFontSize)
-        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.black]
+    /// Sized to the flag beside it and centred like one. It is a mark rather
+    /// than a word set on the line, so unlike the bracketed text it replaces it
+    /// does not take the address's baseline: boxes centre, words sit on the
+    /// baseline, and mixing the two is what looked crooked.
+    private static func badgeImage(_ text: String, height: CGFloat) -> Part? {
+        let stroke: CGFloat = 1
+        let radius = height * 0.3
+        let font = NSFont.systemFont(ofSize: (height * 0.72).rounded(), weight: .semibold)
+        let attributes: [NSAttributedString.Key: Any] = [.font: font,
+                                                         .foregroundColor: NSColor.black]
         let string = text as NSString
-        let size = string.size(withAttributes: attributes)
-        guard size.width > 0, size.height > 0 else { return nil }
+        let textSize = string.size(withAttributes: attributes)
+        // Measured off the iOS badge: it sets the word in about half a badge
+        // height of space either side, which is what stops it looking cramped.
+        let padding = (height * 0.45).rounded()
+        let width = (textSize.width + padding * 2).rounded()
+        guard width > 0, height > 0 else { return nil }
 
-        let boxed = NSImage(size: NSSize(width: size.width.rounded(.up),
-                                         height: size.height.rounded(.up)))
-        boxed.lockFocus()
-        string.draw(at: .zero, withAttributes: attributes)
-        boxed.unlockFocus()
+        let image = NSImage(size: NSSize(width: width, height: height))
+        image.lockFocus()
+        NSGraphicsContext.current?.shouldAntialias = true
 
-        boxed.isTemplate = true
-        // Deliberately not cropped vertically. Text drawn at the origin puts
-        // its baseline exactly one descender above the box's bottom edge, and
-        // that exactness is what the alignment depends on. Cropping to ink
-        // would trim an unknown amount of that away and the baseline with it;
-        // the leftover transparent margin costs nothing, because the part is
-        // placed by its baseline rather than by its box.
-        return Part(image: boxed, baseline: abs(font.descender))
+        // Inset by half the stroke so the line sits inside the bounds rather
+        // than straddling them and clipping.
+        let outline = NSBezierPath(
+            roundedRect: NSRect(x: stroke / 2, y: stroke / 2,
+                                width: width - stroke, height: height - stroke),
+            xRadius: radius, yRadius: radius)
+        outline.lineWidth = stroke
+        NSColor.black.setStroke()
+        outline.stroke()
+
+        // Centre the capitals rather than the line box: the font carries
+        // descender space no capital uses, which would sit the word high.
+        let baseline = (height - font.capHeight) / 2
+        string.draw(at: NSPoint(x: ((width - textSize.width) / 2).rounded(),
+                                y: baseline - abs(font.descender)),
+                    withAttributes: attributes)
+        image.unlockFocus()
+        image.isTemplate = true
+        return Part(image: image, baseline: nil)
     }
-
 
     /// One element of the composite.
     ///
     /// `baseline` is the distance from the image's bottom edge to the text
-    /// baseline, for parts that are text. Marks have none and are centred.
+    /// baseline, for parts that are words set on the line. Marks have none and
+    /// are centred instead.
     private struct Part {
         let image: NSImage
         let baseline: CGFloat?

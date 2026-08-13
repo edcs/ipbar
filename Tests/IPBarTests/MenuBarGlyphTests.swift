@@ -20,7 +20,7 @@ struct MenuBarGlyphTests {
         let flagOnly = try #require(MenuBarGlyph.image(
             qualifier: .country("gb"), vpnLabel: nil, muted: false, dark: false, store: store))
         let both = try #require(MenuBarGlyph.image(
-            qualifier: .country("gb"), vpnLabel: "(VPN)", muted: false, dark: false, store: store))
+            qualifier: .country("gb"), vpnLabel: "VPN", muted: false, dark: false, store: store))
 
         #expect(both.size.width > flagOnly.size.width)
     }
@@ -77,15 +77,47 @@ struct MenuBarGlyphTests {
         let plain = try #require(MenuBarGlyph.image(
             qualifier: .country("gb"), vpnLabel: nil, muted: false, dark: false, store: store))
         let labelled = try #require(MenuBarGlyph.image(
-            qualifier: .country("gb"), vpnLabel: "(VPN)", muted: false, dark: false, store: store))
+            qualifier: .country("gb"), vpnLabel: "VPN", muted: false, dark: false, store: store))
         // Text is wider than a padlock glyph was, and must actually take space.
         #expect(labelled.size.width > plain.size.width + 10)
+    }
+
+    @Test("the badge stands as tall as the flag it sits beside")
+    func badgeMatchesFlagHeight() throws {
+        // It is meant to read as a matched pair with the flag, not as text
+        // that happens to be nearby.
+        let flagOnly = try #require(MenuBarGlyph.image(
+            qualifier: .country("gb"), vpnLabel: nil, muted: false, dark: false, store: store))
+        let badgeOnly = try #require(MenuBarGlyph.image(
+            qualifier: .none, vpnLabel: "VPN", muted: false, dark: false, store: store))
+
+        #expect(badgeOnly.size.height == flagOnly.size.height)
+        // A word in a box is wider than a flag.
+        #expect(badgeOnly.size.width > flagOnly.size.width)
+    }
+
+    @Test("the badge is an outline, so its middle stays empty")
+    func badgeIsOutlined() throws {
+        let image = try #require(MenuBarGlyph.image(
+            qualifier: .none, vpnLabel: "VPN", muted: false, dark: false, store: store))
+        let rep = try #require(image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
+
+        // Just inside the leading edge of the box, between the border and the
+        // first letter, nothing should be drawn.
+        let y = rep.pixelsHigh / 2
+        var sawBorder = false, sawGapAfterBorder = false
+        for x in 0..<rep.pixelsWide {
+            let on = (rep.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.5
+            if on { sawBorder = true } else if sawBorder { sawGapAfterBorder = true; break }
+        }
+        #expect(sawBorder, "the border should be drawn")
+        #expect(sawGapAfterBorder, "a filled badge would have no gap behind its border")
     }
 
     @Test("the VPN label alone still shows without a flag")
     func vpnLabelWithoutFlag() throws {
         let image = try #require(MenuBarGlyph.image(
-            qualifier: .none, vpnLabel: "(VPN)", muted: false, dark: false, store: store))
+            qualifier: .none, vpnLabel: "VPN", muted: false, dark: false, store: store))
         #expect(image.size.width > 0)
         // No flag means nothing forces colour, so the system can tint it.
         #expect(image.isTemplate)
@@ -98,7 +130,7 @@ struct MenuBarGlyphTests {
         #expect(interface.isTemplate)
 
         let vpnOnly = try #require(MenuBarGlyph.image(
-            qualifier: .none, vpnLabel: "(VPN)", muted: false, dark: false, store: store))
+            qualifier: .none, vpnLabel: "VPN", muted: false, dark: false, store: store))
         #expect(vpnOnly.isTemplate)
     }
 
@@ -178,9 +210,9 @@ struct MenuBarInkTests {
         // A flag forces the composite to colour, so the label cannot be a
         // template and the system will not tint it. It is drawn to match.
         let light = try #require(MenuBarGlyph.image(
-            qualifier: .country("gb"), vpnLabel: "(VPN)", muted: false, dark: false, store: store))
+            qualifier: .country("gb"), vpnLabel: "VPN", muted: false, dark: false, store: store))
         let dark = try #require(MenuBarGlyph.image(
-            qualifier: .country("gb"), vpnLabel: "(VPN)", muted: false, dark: true, store: store))
+            qualifier: .country("gb"), vpnLabel: "VPN", muted: false, dark: true, store: store))
 
         let onLight = try #require(inkPixel(light))
         let onDark = try #require(inkPixel(dark))
@@ -192,9 +224,9 @@ struct MenuBarInkTests {
     @Test("light and dark are cached separately")
     func cachedPerAppearance() throws {
         let light = try #require(MenuBarGlyph.image(
-            qualifier: .country("gb"), vpnLabel: "(VPN)", muted: false, dark: false, store: store))
+            qualifier: .country("gb"), vpnLabel: "VPN", muted: false, dark: false, store: store))
         let dark = try #require(MenuBarGlyph.image(
-            qualifier: .country("gb"), vpnLabel: "(VPN)", muted: false, dark: true, store: store))
+            qualifier: .country("gb"), vpnLabel: "VPN", muted: false, dark: true, store: store))
         #expect(light !== dark, "one cache entry for both would freeze the first appearance in")
     }
 }

@@ -115,11 +115,11 @@ final class NetworkModel {
         }
     }
 
-    /// Trails the flag as plain text rather than a padlock. A lock beside a
-    /// flag is a lot of iconography for one fact, and "(VPN)" says it outright.
+    /// Trails the flag as an outlined badge rather than a padlock. A lock beside a
+    /// flag is a lot of iconography for one fact, and the word says it outright.
     var menuBarVPNLabel: String? {
         guard preferences.showVPNIndicator, vpn.isActive else { return nil }
-        return "(VPN)"
+        return "VPN"
     }
 
     /// What trails the address in the menu bar.
