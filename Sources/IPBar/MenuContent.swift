@@ -80,10 +80,12 @@ struct MenuContent: View {
                             : "Can't reach the internet right now.")
             } else {
                 if let address = model.publicIPv4 {
-                    row(kind: "IPv4", address: address, scope: .publicAddress)
+                    row(kind: "IPv4", address: address, scope: .publicAddress,
+                        heldBy: model.interfaceHolding(address))
                 }
                 if let address = model.publicIPv6 {
-                    row(kind: "IPv6", address: address, scope: .publicAddress)
+                    row(kind: "IPv6", address: address, scope: .publicAddress,
+                        heldBy: model.interfaceHolding(address))
                 }
             }
         }
@@ -107,8 +109,7 @@ struct MenuContent: View {
                     ForEach(group.addresses) { interface in
                         row(kind: interface.family.rawValue,
                             address: interface.address,
-                            scope: .localAddress,
-                            inUse: model.isEgress(interface.address))
+                            scope: .localAddress)
                     }
                 }
             }
@@ -142,13 +143,13 @@ struct MenuContent: View {
     // MARK: - Address row
 
     private func row(kind: String, address: String,
-                     scope: AddressLabel.Scope, inUse: Bool = false) -> some View {
+                     scope: AddressLabel.Scope, heldBy: String? = nil) -> some View {
         let key = RowKey(address: address, scope: scope)
         return Group {
             if editing == key {
                 nameEditor(key: key)
             } else {
-                addressRow(kind: kind, key: key, inUse: inUse)
+                addressRow(kind: kind, key: key, heldBy: heldBy)
             }
         }
         .padding(.horizontal, 4)
@@ -156,7 +157,7 @@ struct MenuContent: View {
 
     /// A named address puts the name first and demotes the address, because
     /// naming is the point of the app. It is the only place colour appears.
-    private func addressRow(kind: String, key: RowKey, inUse: Bool) -> some View {
+    private func addressRow(kind: String, key: RowKey, heldBy: String?) -> some View {
         let address = key.address
         let name = model.name(for: address, scope: key.scope)
         let justCopied = copied == key
@@ -206,8 +207,11 @@ struct MenuContent: View {
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(.secondary)
                             .labelStyle(.titleAndIcon)
-                    } else if inUse {
-                        badge("in use")
+                    } else if let heldBy {
+                        // The same address is this Mac's too, so it is listed
+                        // once here rather than again under the interface.
+                        badge(heldBy, help: "Also this Mac's \(heldBy) address. "
+                              + "IPv6 has no NAT, so your address is the one the internet sees.")
                     }
                 }
             }
@@ -293,14 +297,14 @@ struct MenuContent: View {
         }
     }
 
-    private func badge(_ text: String) -> some View {
+    private func badge(_ text: String, help: String) -> some View {
         Text(text)
             .font(.system(size: 9, weight: .medium))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 4)
             .padding(.vertical, 1)
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 3))
-            .help("The address the outside world sees traffic coming from")
+            .help(help)
     }
 
     // MARK: - VPN

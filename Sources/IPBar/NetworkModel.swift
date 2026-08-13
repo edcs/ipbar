@@ -50,12 +50,35 @@ final class NetworkModel {
     }
 
     var localGroups: [InterfaceGroup] {
+        Self.groups(from: interfaces, collapsing: [publicIPv4, publicIPv6].compactMap { $0 })
+    }
+
+    /// Groups local addresses, leaving out any that are also the public
+    /// address.
+    ///
+    /// IPv6 has no NAT, so this Mac's global address *is* the public one and
+    /// would otherwise be listed twice. It is shown once, in the public
+    /// section, badged with the interface holding it. A group left with nothing
+    /// is dropped rather than shown empty.
+    static func groups(from interfaces: [NetworkInterface],
+                       collapsing publicAddresses: [String]) -> [InterfaceGroup] {
+        let collapsed = Set(publicAddresses)
         let usable = interfaces.filter {
             $0.kind != .loopback && $0.kind != .virtual && !$0.isLinkLocal
+                && !collapsed.contains($0.address)
         }
+
         return Dictionary(grouping: usable, by: \.label)
-            .map { InterfaceGroup(id: $0.key, addresses: $0.value.sorted { $0.family.rawValue < $1.family.rawValue }) }
+            .map { InterfaceGroup(id: $0.key,
+                                  addresses: $0.value.sorted { $0.family.rawValue < $1.family.rawValue }) }
+            .filter { !$0.addresses.isEmpty }
             .sorted { $0.id < $1.id }
+    }
+
+    /// The interface holding this address, when this Mac holds it directly.
+    /// Lets a collapsed public address still say where it lives.
+    func interfaceHolding(_ address: String) -> String? {
+        interfaces.first { $0.address == address && $0.kind != .loopback }?.label
     }
 
     /// True when a local address is the one the outside world actually sees.

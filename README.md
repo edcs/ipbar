@@ -82,19 +82,19 @@ tunnel interface. Nothing is special-cased.
 To see everything the menu bar is derived from, run `IPBar --diagnose`. It's useful in bug
 reports, and you can compare it against `scutil --nwi`.
 
-## Which address is in use
+## Your IPv6 address is your public address
 
-An interface usually holds more than one IPv6 address, because macOS keeps a stable one and
-a rotating temporary one for privacy. That would otherwise show up as two identical rows,
-so IPBar marks the one matching your public address **in use**. That's the address the
-outside world actually sees traffic coming from.
+IPv6 has no NAT, so your Mac's global address is the one the internet sees. The same address
+is therefore both a local address and your public one, and listing it in both places would
+be saying the same thing twice.
 
-## Why an IPv6 address appears twice
+IPBar shows it once, under **Public**, badged with the interface holding it. So a row reading
+`2a06:…` with a **Wi-Fi** badge means: this is your public IPv6, and it lives on your Wi-Fi
+interface. Everything else your interfaces hold, including the rotating temporary IPv6 macOS
+keeps for privacy, is listed under **This Mac** as usual.
 
-Your public IPv6 will usually be identical to one of the addresses under **This Mac**, and
-that is correct rather than a fault. IPv6 has no NAT, so your Mac's global address is the
-one the internet sees. IPv4 differs between the two sections only because NAT sits in the
-way, translating a private address like `192.168.1.77` to a public one.
+IPv4 behaves differently only because NAT sits in the way, translating a private address like
+`192.168.1.77` into a public one, so the two are genuinely different addresses.
 
 ## The country flag
 
@@ -120,7 +120,7 @@ the address.
 ```sh
 make hooks           # enable the commit-message hook, once per clone
 swift build          # compile
-swift test           # 53 tests, no network needed
+swift test           # 59 tests, no network needed
 make icon            # redraw the icon and compile the .icns
 make app             # universal .app in dist/
 make run             # build and launch
