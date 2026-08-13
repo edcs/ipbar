@@ -11,7 +11,9 @@ head every time. Tell IPBar it's called "Office" and the menu bar says `Office`.
   wins, so a `/32` for your static IP beats the `/24` it sits in.
 - **VPN state.** See whether your traffic is going through a tunnel, and whether that
   tunnel is full or split.
-- Public IPv4 and IPv6, plus every local interface. Click any of them to copy.
+- Public IPv4 and IPv6, plus every local interface. Click any address to copy it.
+- **Country flag** for your public address, with a muted option if you'd rather it sat
+  quietly. Useful for checking which country your VPN is exiting from.
 - Updates when the network changes and when your Mac wakes. It doesn't poll.
 - No dock icon. No analytics. No network calls except the public IP lookup.
 
@@ -68,6 +70,23 @@ tunnel interface. Nothing is special-cased.
 To see everything the menu bar is derived from, run `IPBar --diagnose`. It's useful in bug
 reports, and you can compare it against `scutil --nwi`.
 
+## Which address is in use
+
+An interface usually holds more than one IPv6 address, because macOS keeps a stable one and
+a rotating temporary one for privacy. That would otherwise show up as two identical rows,
+so IPBar marks the one matching your public address **in use**. That's the address the
+outside world actually sees traffic coming from.
+
+## The country flag
+
+The flag comes from the same Cloudflare response IPBar already uses to find your public
+address, so it costs no extra request and adds no other third party. If Cloudflare can't
+place the address, the flag is simply left out.
+
+Flags are flat SVGs, rendered as vectors so they stay sharp at any size. Turn on **Mute the
+flag** in Settings to fade it, which keeps it readable as a label without it becoming the
+loudest thing in the panel.
+
 ## Development
 
 ```sh
@@ -106,6 +125,7 @@ Sources live in `Sources/IPBar/`.
 | `App.swift` | the `MenuBarExtra` scene and the settings window |
 | `MenuContent.swift` | the panel that opens from the menu bar |
 | `SettingsView.swift` | the General and Names tabs |
+| `FlagImage.swift` | flag rendering and the cached lookup behind it |
 | `Diagnostics.swift` | `--diagnose` output |
 | `Tools/GenerateIcon.swift` | draws the app icon |
 | `Tools/setup-signing.sh` | one-time certificate and notarization setup |
@@ -157,3 +177,7 @@ it to the tap.
 ## Licence
 
 MIT. © 2026 ECS Software Consulting Ltd.
+
+Flag artwork is [flag-icons](https://github.com/lipis/flag-icons) by Panayiotis Lipiridis,
+used under the MIT licence. The 257 country flags are vendored in `Resources/Flags/`, with
+the licence alongside them.

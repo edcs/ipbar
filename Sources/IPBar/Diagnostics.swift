@@ -29,8 +29,8 @@ enum Diagnostics {
 
         let service = PublicIPService()
         let semaphore = DispatchSemaphore(value: 0)
-        nonisolated(unsafe) var v4: String?
-        nonisolated(unsafe) var v6: String?
+        nonisolated(unsafe) var v4: PublicIPService.Result?
+        nonisolated(unsafe) var v6: PublicIPService.Result?
         Task {
             async let a = service.fetch(.ipv4)
             async let b = service.fetch(.ipv6)
@@ -40,8 +40,9 @@ enum Diagnostics {
         _ = semaphore.wait(timeout: .now() + 20)
 
         print("")
-        print("Public             IPv4: \(v4 ?? "none")")
-        print("                   IPv6: \(v6 ?? "none")")
+        print("Public             IPv4: \(v4?.address ?? "none")")
+        print("                   IPv6: \(v6?.address ?? "none")")
+        print("                Country: \(v4?.country ?? v6?.country ?? "unknown")")
 
         let labels = MainActor.assumeIsolated { Preferences().labels }
         print("")
@@ -50,7 +51,7 @@ enum Diagnostics {
             let valid = label.prefix == nil ? "  [invalid pattern]" : ""
             print("  \(label.pattern) → \(label.name) [\(label.scope.rawValue)]\(valid)")
         }
-        for address in [v4, v6].compactMap({ $0 }) {
+        for address in [v4?.address, v6?.address].compactMap({ $0 }) {
             let matched = labels.name(for: address, scope: .publicAddress) ?? "no match"
             print("  resolve \(address) → \(matched)")
         }

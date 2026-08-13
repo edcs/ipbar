@@ -10,6 +10,7 @@ final class NetworkModel {
     private(set) var vpn = VPNState()
     private(set) var publicIPv4: String?
     private(set) var publicIPv6: String?
+    private(set) var country: String?
     private(set) var lastUpdated: Date?
     private(set) var isRefreshing = false
 
@@ -39,6 +40,32 @@ final class NetworkModel {
 
     var primaryPublic: String? {
         preferences.preferIPv6 ? (publicIPv6 ?? publicIPv4) : (publicIPv4 ?? publicIPv6)
+    }
+
+    /// Local addresses grouped by interface, so "Wi-Fi" is stated once rather
+    /// than repeated against every address it holds.
+    struct InterfaceGroup: Identifiable {
+        let id: String
+        let addresses: [NetworkInterface]
+    }
+
+    var localGroups: [InterfaceGroup] {
+        let usable = interfaces.filter {
+            $0.kind != .loopback && $0.kind != .virtual && !$0.isLinkLocal
+        }
+        return Dictionary(grouping: usable, by: \.label)
+            .map { InterfaceGroup(id: $0.key, addresses: $0.value.sorted { $0.family.rawValue < $1.family.rawValue }) }
+            .sorted { $0.id < $1.id }
+    }
+
+    /// True when a local address is the one the outside world actually sees.
+    ///
+    /// macOS gives an interface both a stable and a temporary IPv6, which
+    /// otherwise appear as two identical rows. Matching against the public
+    /// address says which of them traffic is leaving from, which is more use
+    /// than labelling one "temporary".
+    func isEgress(_ address: String) -> Bool {
+        address == publicIPv4 || address == publicIPv6
     }
 
     func name(for address: String, scope: AddressLabel.Scope) -> String? {
@@ -122,8 +149,9 @@ final class NetworkModel {
         let (fetchedV4, fetchedV6) = await (v4, v6)
         guard !Task.isCancelled else { return }
 
-        publicIPv4 = fetchedV4
-        publicIPv6 = fetchedV6
+        publicIPv4 = fetchedV4?.address
+        publicIPv6 = fetchedV6?.address
+        country = fetchedV4?.country ?? fetchedV6?.country
         lastUpdated = Date()
     }
 }

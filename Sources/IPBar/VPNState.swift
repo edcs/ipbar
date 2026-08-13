@@ -26,10 +26,34 @@ struct VPNState: Equatable, Sendable {
     var isActive: Bool { mode != .off }
 
     var summary: String {
+        [headline, detail].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    var headline: String {
         switch mode {
-        case .off: return "No VPN"
-        case .full: return "VPN — all traffic (\(primaryTunnel ?? "tunnel"))"
-        case .split: return "VPN — split tunnel (\(tunnels.joined(separator: ", ")))"
+        case .off: return "Not using a VPN"
+        case .full: return "All traffic through a VPN"
+        case .split: return "Some traffic through a VPN"
+        }
+    }
+
+    /// The tunnel interface, kept as a second line rather than folded into the
+    /// sentence: useful to someone debugging, noise to everyone else.
+    var detail: String? {
+        switch mode {
+        case .off: return nil
+        case .full: return primaryTunnel
+        case .split: return tunnels.joined(separator: ", ")
+        }
+    }
+
+    /// An open padlock for the normal, no-VPN case reads as a warning about
+    /// something being wrong. A plain shield states the fact without alarm.
+    var symbol: String {
+        switch mode {
+        case .off: return "shield"
+        case .full: return "lock.shield.fill"
+        case .split: return "lock.shield"
         }
     }
 

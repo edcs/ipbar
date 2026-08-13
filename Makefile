@@ -43,6 +43,7 @@ app: Resources/AppIcon.icns
 	mkdir -p $(DIST)/$(BUNDLE)/Contents/MacOS $(DIST)/$(BUNDLE)/Contents/Resources
 	lipo -create -output $(DIST)/$(BUNDLE)/Contents/MacOS/$(APP_NAME) $(ARM_BIN) $(X86_BIN)
 	cp Resources/AppIcon.icns $(DIST)/$(BUNDLE)/Contents/Resources/AppIcon.icns
+	cp -R Resources/Flags $(DIST)/$(BUNDLE)/Contents/Resources/Flags
 	sed 's/__VERSION__/$(VERSION)/g' Resources/Info.plist > $(DIST)/$(BUNDLE)/Contents/Info.plist
 	@echo "built $(DIST)/$(BUNDLE) ($(VERSION))"
 
