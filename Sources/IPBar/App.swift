@@ -10,10 +10,6 @@ struct IPBarApp: App {
 
     @State private var preferences: Preferences
     @State private var model: NetworkModel
-    /// Bumped when the system switches between light and dark, to rebuild the
-    /// menu bar image. Text baked into a colour composite carries the colour it
-    /// was drawn with, so without this it would stay dark on a dark menu bar.
-    @State private var appearance = 0
 
     init() {
         Diagnostics.runIfRequested()
@@ -31,26 +27,10 @@ struct IPBarApp: App {
             // image, so the order written here is not the order drawn and any
             // padding is discarded. MenuBarLayout moves the image after the
             // title; the gap before the flag is baked into the image.
-            HStack(spacing: 0) {
-                Text(model.menuBarText)
-                if let glyph = MenuBarGlyph.image(qualifier: model.menuBarQualifier,
-                                                  vpnLabel: model.menuBarVPNLabel,
-                                                  muted: preferences.mutedFlag) {
-                    Image(nsImage: glyph)
-                }
-            }
-            .id(appearance)
+            MenuBarLabel(model: model, preferences: preferences)
             .task {
                 model.start()
                 MenuBarLayout.placeFlagAfterAddress()
-            }
-            .task {
-                let name = Notification.Name("AppleInterfaceThemeChangedNotification")
-                for await _ in DistributedNotificationCenter.default().notifications(named: name) {
-                    MenuBarGlyph.invalidate()
-                    appearance += 1
-                    MenuBarLayout.placeFlagAfterAddress()
-                }
             }
             // SwiftUI puts imagePosition back whenever the label changes.
             .onChange(of: model.menuBarText) { MenuBarLayout.placeFlagAfterAddress() }
@@ -63,5 +43,28 @@ struct IPBarApp: App {
         }
         .windowResizability(.contentSize)
         .defaultPosition(.center)
+    }
+}
+
+/// The menu bar's own label.
+///
+/// A view of its own so it can read the colour scheme: text baked into the
+/// trailing image carries the colour it was drawn with, and SwiftUI rebuilds
+/// this when the system switches between light and dark.
+private struct MenuBarLabel: View {
+    @Bindable var model: NetworkModel
+    @Bindable var preferences: Preferences
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Text(model.menuBarText)
+            if let glyph = MenuBarGlyph.image(qualifier: model.menuBarQualifier,
+                                              vpnLabel: model.menuBarVPNLabel,
+                                              muted: preferences.mutedFlag,
+                                              dark: colorScheme == .dark) {
+                Image(nsImage: glyph)
+            }
+        }
     }
 }

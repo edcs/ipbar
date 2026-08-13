@@ -32,8 +32,8 @@ enum MenuBarGlyph {
     private static var cache: [String: NSImage] = [:]
 
     static func image(qualifier: Qualifier, vpnLabel: String?, muted: Bool,
-                      store: FlagStore = .shared) -> NSImage? {
-        let key = "\(ObjectIdentifier(store))|\(qualifier)|\(vpnLabel ?? "-")|\(muted)"
+                      dark: Bool, store: FlagStore = .shared) -> NSImage? {
+        let key = "\(ObjectIdentifier(store))|\(qualifier)|\(vpnLabel ?? "-")|\(muted)|\(dark)"
         if let cached = cache[key] { return cached }
 
         let height = FlagStore.menuBarFlagHeight
@@ -60,7 +60,7 @@ enum MenuBarGlyph {
         // Tall enough for the tallest part: a canvas fixed at the flag's height
         // silently cropped the symbols.
         let canvas = max(height, parts.map(\.size.height).max() ?? height)
-        guard let composed = compose(parts, height: canvas, colour: hasColour) else { return nil }
+        guard let composed = compose(parts, height: canvas, colour: hasColour, dark: dark) else { return nil }
 
         cache[key] = composed
         return composed
@@ -77,20 +77,6 @@ enum MenuBarGlyph {
     /// tower over the address. Derived from the flag so the two stay in step
     /// when the menu bar text size changes.
     nonisolated static var symbolInkHeight: CGFloat { FlagStore.menuBarFlagHeight + 1 }
-
-    /// The colour the menu bar is drawing its own text in right now.
-    ///
-    /// Resolved against the current appearance rather than assumed, so text
-    /// baked into a colour composite still flips with light and dark. The
-    /// cache is cleared on appearance changes so this is re-read.
-    private static func menuBarInk() -> NSColor {
-        let appearance = NSApplication.shared.effectiveAppearance
-        var resolved = NSColor.labelColor
-        appearance.performAsCurrentDrawingAppearance {
-            resolved = NSColor.labelColor.usingColorSpace(.deviceRGB) ?? .labelColor
-        }
-        return resolved
-    }
 
     /// Scales a symbol so the mark it actually draws is `inkHeight` tall.
     ///
@@ -150,8 +136,9 @@ enum MenuBarGlyph {
     /// part of the same line as the address.
     ///
     /// Drawn in black with no colour of its own. Without a flag the whole
-    /// composite stays a template and the system tints it; with one, `compose`
-    /// tints it to match the surrounding text.
+    /// composite stays a template and the system tints it. With one, the
+    /// composite has to be colour, so `compose` tints this to match the menu
+    /// bar's own text for the current appearance.
     private static func textImage(_ text: String) -> NSImage? {
         let font = NSFont.menuBarFont(ofSize: 0)
         let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.black]
@@ -168,7 +155,8 @@ enum MenuBarGlyph {
         return image
     }
 
-    private static func compose(_ parts: [NSImage], height: CGFloat, colour: Bool) -> NSImage? {
+    private static func compose(_ parts: [NSImage], height: CGFloat,
+                                colour: Bool, dark: Bool) -> NSImage? {
         let inner: CGFloat = 4
         let lead = FlagStore.menuBarFlagGap
         let width = lead + parts.map(\.size.width).reduce(0, +) + inner * CGFloat(parts.count - 1)
@@ -198,7 +186,7 @@ enum MenuBarGlyph {
             // colour, so anything template beside it is tinted to whatever the
             // menu bar is currently using for its own text.
             if colour, part.isTemplate {
-                menuBarInk().set()
+                (dark ? NSColor.white : NSColor.black).set()
                 box.fill(using: .sourceAtop)
             }
             x += part.size.width + inner

@@ -120,7 +120,7 @@ the address.
 ```sh
 make hooks           # enable the commit-message hook, once per clone
 swift build          # compile
-swift test           # 61 tests, no network needed
+swift test           # 63 tests, no network needed
 make icon            # redraw the icon and compile the .icns
 make app             # universal .app in dist/
 make run             # build and launch
