@@ -19,14 +19,11 @@ struct MenuContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    publicSection
-                    localSection
-                }
-                .padding(.vertical, 10)
+            VStack(alignment: .leading, spacing: 0) {
+                publicSection
+                localSection
             }
-            .frame(maxHeight: 460)
+            .padding(.vertical, 10)
 
             Divider()
             vpnRow
@@ -49,12 +46,10 @@ struct MenuContent: View {
                             .font(.system(size: 10, weight: .semibold))
                             .monospaced()
                             .foregroundStyle(.secondary)
-                        if preferences.flagVisibility.showsInPanel {
-                            // Sized against the 10pt header type beside it, not
-                            // the larger body text elsewhere in the panel.
-                            FlagImage(country: country, height: 9,
-                                      muted: preferences.mutedFlag)
-                        }
+                        // Always shown here: the panel is where you come to
+                        // read the addresses, so the flag belongs with them.
+                        FlagImage(country: country, height: 9,
+                                  muted: preferences.mutedFlag)
                     }
                     .help(Locale.current.localizedString(forRegionCode: country)
                           .map { "Your public address is in \($0)" } ?? "Country of your public address")

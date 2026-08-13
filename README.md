@@ -85,10 +85,10 @@ place the address, the flag is simply left out.
 
 Flags are flat SVGs, rendered as vectors so they stay sharp at any size.
 
-**Country flag** in Settings controls where it appears: hidden, in the panel, or in the
-panel and the menu bar. **Mute the flag** fades it, which keeps it readable as a label
-without it becoming the loudest thing on screen. That matters more in the menu bar, where a
-full-colour flag sits next to monochrome system icons.
+The panel always shows the flag beside your public address. **Show flag in the menu bar**
+controls whether it appears there too, and **Mute the flag** fades it, which keeps it
+readable as a label without it becoming the loudest thing on screen. That matters more in
+the menu bar, where a full-colour flag sits next to monochrome system icons.
 
 A flag describes where your *public* address is, so it would say something untrue beside a
 local one. When the menu bar is set to show a local address, you get that interface's icon

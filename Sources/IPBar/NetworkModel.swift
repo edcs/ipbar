@@ -103,7 +103,7 @@ final class NetworkModel {
     /// local address states something untrue about it. A local address gets the
     /// interface it belongs to instead, which is the equivalent fact about it.
     var menuBarQualifier: MenuBarGlyph.Qualifier {
-        guard preferences.flagVisibility.showsInMenuBar else { return .none }
+        guard preferences.showFlagInMenuBar else { return .none }
 
         switch preferences.displaySource {
         case .localAddress:

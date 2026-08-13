@@ -19,12 +19,9 @@ struct SettingsView: View {
             }
             Toggle("Prefer IPv6", isOn: $preferences.preferIPv6)
             Toggle("Show VPN indicator", isOn: $preferences.showVPNIndicator)
-            Picker("Country flag", selection: $preferences.flagVisibility) {
-                ForEach(FlagVisibility.allCases, id: \.self) { Text($0.title).tag($0) }
-            }
-            .help("A flag says where your public address is, so when the menu bar shows a local address it shows that interface instead")
+            Toggle("Show flag in the menu bar", isOn: $preferences.showFlagInMenuBar)
+                .help("A flag says where your public address is, so when the menu bar shows a local address it shows a local network icon instead")
             Toggle("Mute the flag", isOn: $preferences.mutedFlag)
-                .disabled(preferences.flagVisibility == .hidden)
                 .help("Fades the flag so it reads as a label rather than the loudest thing on screen")
             Toggle("Show name instead of address", isOn: $preferences.namesReplaceAddresses)
             Picker("Refresh every", selection: $preferences.refreshMinutes) {

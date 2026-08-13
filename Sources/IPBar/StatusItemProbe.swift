@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftUI
 
 /// Dumps what the menu bar item actually ended up containing.
 ///
@@ -8,7 +9,9 @@ import Foundation
 /// Run with `IPBAR_PROBE=1` to have the app report its own status item.
 enum StatusItemProbe {
     static func startIfRequested() {
-        guard ProcessInfo.processInfo.environment["IPBAR_PROBE"] == "1" else { return }
+        let mode = ProcessInfo.processInfo.environment["IPBAR_PROBE"]
+        if mode == "panel" { renderPanel(); return }
+        guard mode == "1" else { return }
 
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(5))
@@ -21,6 +24,36 @@ enum StatusItemProbe {
                 }
             }
             if found == 0 { emit("no NSStatusBarButton found in \(NSApplication.shared.windows.count) windows") }
+            exit(0)
+        }
+    }
+
+    /// Renders the panel to a PNG so its layout can actually be looked at.
+    /// `IPBAR_PROBE=panel IPBAR_PANEL_OUT=/tmp/panel.png IPBar`
+    private static func renderPanel() {
+        Task { @MainActor in
+            let preferences = Preferences()
+            let model = NetworkModel(preferences: preferences)
+            model.start()
+            try? await Task.sleep(for: .seconds(6))   // let the lookups land
+
+            let renderer = ImageRenderer(content:
+                MenuContent(model: model, preferences: preferences)
+                    .frame(width: 344)
+                    .background(Color(nsColor: .windowBackgroundColor))
+            )
+            renderer.scale = 2
+
+            let path = ProcessInfo.processInfo.environment["IPBAR_PANEL_OUT"] ?? "/tmp/ipbar-panel.png"
+            guard let image = renderer.nsImage,
+                  let tiff = image.tiffRepresentation,
+                  let rep = NSBitmapImageRep(data: tiff),
+                  let png = rep.representation(using: .png, properties: [:]) else {
+                emit("could not render the panel")
+                exit(1)
+            }
+            try? png.write(to: URL(fileURLWithPath: path))
+            emit("wrote \(path) (\(Int(image.size.width))x\(Int(image.size.height)))")
             exit(0)
         }
     }
