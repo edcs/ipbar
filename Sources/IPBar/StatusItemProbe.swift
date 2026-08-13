@@ -25,6 +25,7 @@ enum StatusItemProbe {
         }
     }
 
+    @MainActor
     private static func statusButtons(in view: NSView) -> [NSStatusBarButton] {
         var result: [NSStatusBarButton] = []
         if let button = view as? NSStatusBarButton { result.append(button) }
@@ -32,6 +33,7 @@ enum StatusItemProbe {
         return result
     }
 
+    @MainActor
     private static func report(_ button: NSStatusBarButton) {
         let position: String
         switch button.imagePosition {
