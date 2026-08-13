@@ -1,17 +1,22 @@
-# Tagging v* creates the GitHub release, with notes read off the Conventional
-# Commit subjects since the previous tag.
+# Prepares a release: tags the commit and drafts the GitHub release, with notes
+# read off the Conventional Commit subjects since the previous tag.
 #
-# Publishing that release is what builds and ships it, in release.yml. This
-# workflow does not call that one; the release event links them.
+# Run it from the Actions tab with a version number, or push a v* tag yourself.
 #
-# A release created with the built-in GITHUB_TOKEN does not raise events that
-# start other workflows, which is GitHub stopping workflows from looping. Set a
-# RELEASE_TOKEN secret, a token that can write to this repo, and the build
-# starts on its own. Without one the release still appears, and publishing or
-# re-running it by hand starts the build.
+# It stops at a draft on purpose. Publishing that draft is what builds and ships
+# it, in release.yml, so the notes get read before anything is signed and the
+# tap is moved. It also sidesteps a rule that would otherwise bite: a release
+# published by a workflow using the built-in token raises no events, so nothing
+# downstream would start. A person clicking Publish does.
 name: Create release
 
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, without the v (e.g. 0.1.0)"
+        required: true
+        type: string
   push:
     tags: ["v*"]
 
@@ -19,26 +24,65 @@ permissions:
   contents: write
 
 jobs:
-  create:
+  draft:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # notes are read from the whole history
 
-      - name: Write the notes
-        id: notes
+      - name: Work out the tag
+        id: tag
         env:
-          TAG: ${{ github.ref_name }}
+          EVENT: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            # Checked rather than trusted: this becomes a git tag, and the
+            # value came from a text box.
+            if ! printf '%s' "$INPUT_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "::error::Version must look like 1.2.3, with no leading v"
+              exit 1
+            fi
+            TAG="v$INPUT_VERSION"
+          else
+            TAG="$REF_NAME"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "releasing $TAG"
+
+      - name: Tag the commit
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "::error::$TAG already exists"
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "$TAG"
+          git push origin "$TAG"
+
+      - name: Write the notes
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
         run: ./Tools/release-notes.sh "" "$TAG" > release-notes.md
 
-      - name: Create the release
+      - name: Draft the release
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
-          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
         run: |
           gh release create "$TAG" \
             --title "$TAG" \
             --notes-file release-notes.md \
-            --verify-tag
-          echo "created $TAG"
+            --verify-tag \
+            --draft
+
+          echo "### Draft release $TAG is ready" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Read the notes, then press **Publish release** to build and ship it." >> "$GITHUB_STEP_SUMMARY"
+          gh release view "$TAG" --json url --jq .url >> "$GITHUB_STEP_SUMMARY"
