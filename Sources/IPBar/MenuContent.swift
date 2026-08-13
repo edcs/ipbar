@@ -262,7 +262,17 @@ struct MenuContent: View {
         .padding(.vertical, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
-        .task { nameFieldFocused = true }
+        // Asking once is unreliable: on the first open the field is not yet in
+        // the responder chain and the request is dropped, which is why a second
+        // open appeared to work when the first did not. Keep asking briefly and
+        // stop as soon as it takes.
+        .task(id: address) {
+            for _ in 0..<12 {
+                if nameFieldFocused { return }
+                nameFieldFocused = true
+                try? await Task.sleep(for: .milliseconds(40))
+            }
+        }
     }
 
     private func badge(_ text: String) -> some View {
