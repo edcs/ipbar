@@ -2,6 +2,21 @@ import Foundation
 import Observation
 import ServiceManagement
 
+enum FlagVisibility: String, CaseIterable, Codable, Sendable {
+    case hidden, panel, everywhere
+
+    var title: String {
+        switch self {
+        case .hidden: return "Hidden"
+        case .panel: return "In the panel"
+        case .everywhere: return "Panel and menu bar"
+        }
+    }
+
+    var showsInPanel: Bool { self != .hidden }
+    var showsInMenuBar: Bool { self == .everywhere }
+}
+
 enum DisplaySource: String, CaseIterable, Codable, Sendable {
     case publicAddress, localAddress, both
 
@@ -20,7 +35,7 @@ final class Preferences {
     var displaySource: DisplaySource { didSet { write(displaySource.rawValue, .displaySource) } }
     var preferIPv6: Bool { didSet { write(preferIPv6, .preferIPv6) } }
     var showVPNIndicator: Bool { didSet { write(showVPNIndicator, .showVPNIndicator) } }
-    var showFlag: Bool { didSet { write(showFlag, .showFlag) } }
+    var flagVisibility: FlagVisibility { didSet { write(flagVisibility.rawValue, .flagVisibility) } }
     var mutedFlag: Bool { didSet { write(mutedFlag, .mutedFlag) } }
     /// When a label matches, show only the name. Off shows "Name (1.2.3.4)".
     var namesReplaceAddresses: Bool { didSet { write(namesReplaceAddresses, .namesReplaceAddresses) } }
@@ -50,7 +65,7 @@ final class Preferences {
 
     private enum Key: String {
         case displaySource, preferIPv6, showVPNIndicator, namesReplaceAddresses, refreshMinutes, labels
-        case showFlag, mutedFlag
+        case flagVisibility, mutedFlag
     }
 
     private let defaults: UserDefaults
@@ -61,7 +76,8 @@ final class Preferences {
             .flatMap(DisplaySource.init(rawValue:))) ?? .publicAddress
         preferIPv6 = defaults.bool(forKey: Key.preferIPv6.rawValue)
         showVPNIndicator = defaults.object(forKey: Key.showVPNIndicator.rawValue) as? Bool ?? true
-        showFlag = defaults.object(forKey: Key.showFlag.rawValue) as? Bool ?? true
+        flagVisibility = (defaults.string(forKey: Key.flagVisibility.rawValue)
+            .flatMap(FlagVisibility.init(rawValue:))) ?? .everywhere
         mutedFlag = defaults.object(forKey: Key.mutedFlag.rawValue) as? Bool ?? false
         namesReplaceAddresses = defaults.object(forKey: Key.namesReplaceAddresses.rawValue) as? Bool ?? true
         refreshMinutes = defaults.object(forKey: Key.refreshMinutes.rawValue) as? Int ?? 10

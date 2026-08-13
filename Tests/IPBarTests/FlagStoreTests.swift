@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import IPBar
@@ -47,5 +48,63 @@ struct FlagStoreTests {
     func missingDirectory() {
         #expect(FlagStore(directory: nil).flag(for: "gb") == nil)
         #expect(FlagStore(directory: URL(fileURLWithPath: "/nope")).flag(for: "gb") == nil)
+    }
+}
+
+@Suite("Menu bar flag rendering")
+struct MenuBarFlagTests {
+    private var store: FlagStore {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        return FlagStore(directory: root.appendingPathComponent("Resources/Flags"))
+    }
+
+    private func centrePixel(_ image: NSImage) -> NSColor? {
+        guard let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff) else { return nil }
+        return rep.colorAt(x: rep.pixelsWide / 2, y: rep.pixelsHigh / 2)
+    }
+
+    @Test("renders at a menu bar size with a 4:3 ratio")
+    func size() throws {
+        let image = try #require(store.menuBarImage(for: "gb", muted: false, height: 12))
+        #expect(image.size.height == 12)
+        #expect(image.size.width == 16)
+    }
+
+    @Test("is not a template, so the colour survives the menu bar")
+    func notTemplate() throws {
+        let image = try #require(store.menuBarImage(for: "gb", muted: false))
+        #expect(image.isTemplate == false)
+    }
+
+    @Test("muting actually changes the pixels")
+    func mutingApplies() throws {
+        // Baked into the bitmap rather than applied with SwiftUI modifiers, so
+        // it has to be verified on the pixels rather than assumed.
+        let plain = try #require(store.menuBarImage(for: "gb", muted: false))
+        let faded = try #require(store.menuBarImage(for: "gb", muted: true))
+
+        let plainPixel = try #require(centrePixel(plain))
+        let fadedPixel = try #require(centrePixel(faded))
+
+        #expect(fadedPixel.alphaComponent < plainPixel.alphaComponent)
+        let plainSpread = plainPixel.redComponent - plainPixel.blueComponent
+        let fadedSpread = fadedPixel.redComponent - fadedPixel.blueComponent
+        #expect(abs(fadedSpread) < abs(plainSpread))
+    }
+
+    @Test("an unknown country renders nothing")
+    func unknown() {
+        #expect(store.menuBarImage(for: "zz", muted: false) == nil)
+        #expect(store.menuBarImage(for: "!!", muted: false) == nil)
+    }
+
+    @Test("repeat renders come from cache")
+    func cached() throws {
+        let store = self.store
+        let first = try #require(store.menuBarImage(for: "de", muted: false))
+        let second = try #require(store.menuBarImage(for: "de", muted: false))
+        #expect(first === second)
     }
 }

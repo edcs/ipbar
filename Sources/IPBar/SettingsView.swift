@@ -19,10 +19,12 @@ struct SettingsView: View {
             }
             Toggle("Prefer IPv6", isOn: $preferences.preferIPv6)
             Toggle("Show VPN indicator", isOn: $preferences.showVPNIndicator)
-            Toggle("Show country flag", isOn: $preferences.showFlag)
+            Picker("Country flag", selection: $preferences.flagVisibility) {
+                ForEach(FlagVisibility.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
             Toggle("Mute the flag", isOn: $preferences.mutedFlag)
-                .disabled(!preferences.showFlag)
-                .help("Fades the flag so it reads as a label rather than the loudest thing in the panel")
+                .disabled(preferences.flagVisibility == .hidden)
+                .help("Fades the flag so it reads as a label rather than the loudest thing on screen")
             Toggle("Show name instead of address", isOn: $preferences.namesReplaceAddresses)
             Picker("Refresh every", selection: $preferences.refreshMinutes) {
                 ForEach([1, 5, 10, 30, 60], id: \.self) { Text("\($0) min").tag($0) }

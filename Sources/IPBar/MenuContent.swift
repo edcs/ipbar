@@ -43,7 +43,7 @@ struct MenuContent: View {
             sectionHeader("Public") {
                 if let country = model.country {
                     HStack(spacing: 4) {
-                        if preferences.showFlag {
+                        if preferences.flagVisibility.showsInPanel {
                             FlagImage(country: country, muted: preferences.mutedFlag)
                         }
                         Text(country)

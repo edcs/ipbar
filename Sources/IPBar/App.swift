@@ -22,9 +22,15 @@ struct IPBarApp: App {
         MenuBarExtra {
             MenuContent(model: model, preferences: preferences)
         } label: {
-            HStack(spacing: 3) {
+            HStack(spacing: 4) {
                 if let symbol = model.menuBarSymbol {
                     Image(systemName: symbol)
+                }
+                if preferences.flagVisibility.showsInMenuBar,
+                   let country = model.country,
+                   let flag = FlagStore.shared.menuBarImage(for: country,
+                                                            muted: preferences.mutedFlag) {
+                    Image(nsImage: flag)
                 }
                 Text(model.menuBarText)
             }
