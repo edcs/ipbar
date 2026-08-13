@@ -113,7 +113,42 @@ printf '%s' "$APPLE_ID"      | gh secret set APPLE_ID
 printf '%s' "$TEAM_ID"       | gh secret set APPLE_TEAM_ID
 printf '%s' "$APP_PASSWORD"  | gh secret set APPLE_APP_PASSWORD
 
-ok "six secrets uploaded. Tagging v0.1.0 will now produce a signed release"
+ok "six signing secrets uploaded"
+
+# ----------------------------------------------------------------- tap token
 echo
-echo "Local release:  make release VERSION=0.1.0 SIGN_ID=\"$SIGN_ID\""
-echo "CI release:     git tag v0.1.0 && git push --tags"
+bold "4. Homebrew tap token"
+
+if gh secret list 2>/dev/null | grep -q "^TAP_TOKEN"; then
+  ok "TAP_TOKEN already set"
+else
+  cat <<'EOF'
+
+Releasing updates the cask in edcs/homebrew-tap. That is a different repo, and
+the token Actions provides only reaches this one, so it needs its own.
+
+Make a fine-grained token that can touch nothing else:
+
+  github.com/settings/personal-access-tokens/new
+  Repository access  ->  Only select repositories  ->  edcs/homebrew-tap
+  Permissions        ->  Contents: Read and write
+
+Leave it blank to skip. Releases still publish; the tap just keeps pointing
+at the previous version until you set it.
+
+EOF
+  read -r -s -p "Token: " TAP_TOKEN
+  echo
+  if [ -n "$TAP_TOKEN" ]; then
+    printf '%s' "$TAP_TOKEN" | gh secret set TAP_TOKEN
+    ok "TAP_TOKEN uploaded"
+  else
+    warn "skipped, so the tap will not update on release"
+  fi
+fi
+
+echo
+ok "ready to release"
+echo
+echo "Release:  git tag v0.1.0 && git push origin v0.1.0"
+echo "Locally:  make release VERSION=0.1.0 SIGN_ID=\"$SIGN_ID\""

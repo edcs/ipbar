@@ -1,13 +1,15 @@
-# Signs, notarizes and publishes a release when you push a v* tag.
+# Tagging v* builds, signs, notarizes and publishes a release, then points the
+# Homebrew tap at it. Nothing here needs running by hand.
 #
-# Required repository secrets:
+# Required repository secrets. ./Tools/setup-signing.sh uploads all of them:
 #   SIGNING_CERTIFICATE_P12  base64 of a Developer ID Application .p12
-#                            (`base64 -i cert.p12 | pbcopy`)
 #   SIGNING_CERTIFICATE_PWD  password for that .p12
 #   SIGNING_IDENTITY         e.g. "Developer ID Application: You (TEAMID)"
 #   APPLE_ID                 Apple ID email
 #   APPLE_TEAM_ID            10-character team ID
 #   APPLE_APP_PASSWORD       app-specific password from appleid.apple.com
+#   TAP_TOKEN                a token that can write to edcs/homebrew-tap.
+#                            The built-in GITHUB_TOKEN cannot reach another repo.
 name: Release
 
 on:
@@ -26,6 +28,28 @@ jobs:
       - name: Derive version
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # Fail here rather than three minutes in, after a build, with a signing
+      # error that reads like a code problem.
+      - name: Check the secrets are present
+        env:
+          REQUIRED: SIGNING_CERTIFICATE_P12 SIGNING_CERTIFICATE_PWD SIGNING_IDENTITY APPLE_ID APPLE_TEAM_ID APPLE_APP_PASSWORD
+          SIGNING_CERTIFICATE_P12: ${{ secrets.SIGNING_CERTIFICATE_P12 }}
+          SIGNING_CERTIFICATE_PWD: ${{ secrets.SIGNING_CERTIFICATE_PWD }}
+          SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          missing=""
+          for name in $REQUIRED; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing secrets:$missing. Run ./Tools/setup-signing.sh"
+            exit 1
+          fi
+          echo "all signing secrets present"
 
       - name: Test
         run: swift test
@@ -49,26 +73,37 @@ jobs:
           rm "$RUNNER_TEMP/cert.p12"
 
       - name: Store notarization credentials
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
           xcrun notarytool store-credentials ipbar-notary \
-            --apple-id "${{ secrets.APPLE_ID }}" \
-            --team-id "${{ secrets.APPLE_TEAM_ID }}" \
-            --password "${{ secrets.APPLE_APP_PASSWORD }}"
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD"
 
+      # Values reach the shell through env rather than being interpolated into
+      # it: a git tag may legally contain $, backticks and semicolons, so a tag
+      # name pasted into a command is an injection waiting to happen.
       - name: Build, sign, notarize
-        run: |
-          make release \
-            VERSION="${{ steps.version.outputs.version }}" \
-            SIGN_ID="${{ secrets.SIGNING_IDENTITY }}" \
-            NOTARY_PROFILE=ipbar-notary
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SIGN_ID: ${{ secrets.SIGNING_IDENTITY }}
+        run: make release VERSION="$VERSION" SIGN_ID="$SIGN_ID" NOTARY_PROFILE=ipbar-notary
 
-      - name: Verify Gatekeeper acceptance
-        run: spctl --assess --type execute --verbose=4 dist/IPBar.app
+      # Proves the notarization actually stuck. Without the staple, the app
+      # fails on a machine that cannot reach Apple.
+      - name: Verify Gatekeeper accepts it
+        run: |
+          spctl --assess --type execute --verbose=4 dist/IPBar.app
+          xcrun stapler validate dist/IPBar.app
+          codesign --verify --strict --deep --verbose=2 dist/IPBar.app
 
       - name: Record checksum
         id: checksum
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          FILE=dist/IPBar-${{ steps.version.outputs.version }}.zip
+          FILE="dist/IPBar-${VERSION}.zip"
           echo "sha256=$(shasum -a 256 "$FILE" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Publish release
@@ -76,10 +111,33 @@ jobs:
         with:
           files: dist/IPBar-${{ steps.version.outputs.version }}.zip
           generate_release_notes: true
-          body: |
-            Update the Homebrew cask with:
 
-            ```ruby
-            version "${{ steps.version.outputs.version }}"
-            sha256 "${{ steps.checksum.outputs.sha256 }}"
-            ```
+      # Last, so the tap only ever points at a release that exists.
+      - name: Update the Homebrew tap
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA256: ${{ steps.checksum.outputs.sha256 }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::warning::TAP_TOKEN is not set, so the tap still points at the previous version"
+            exit 0
+          fi
+
+          git clone --depth 1 \
+            "https://x-access-token:${TAP_TOKEN}@github.com/edcs/homebrew-tap.git" tap
+          mkdir -p tap/Casks
+          sed -e "s/__VERSION__/${VERSION}/g" -e "s/__SHA256__/${SHA256}/g" \
+            Casks/ipbar.rb > tap/Casks/ipbar.rb
+
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/ipbar.rb
+          if git diff --staged --quiet; then
+            echo "the cask already describes this version"
+            exit 0
+          fi
+          git commit -m "ipbar ${VERSION}"
+          git push
+          echo "tap now installs ipbar ${VERSION}"

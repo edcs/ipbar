@@ -1,14 +1,14 @@
-# Template for a Homebrew cask. Publish this in your own tap first
-# (github.com/edcs/homebrew-tap), which users install with:
+# The template CI renders into edcs/homebrew-tap when a release is tagged.
 #
-#   brew tap edcs/tap
-#   brew install --cask ipbar
+# __VERSION__ and __SHA256__ are filled in by .github/workflows/release.yml from
+# the tag and the zip it built, so this is never edited by hand and the cask
+# cannot drift from the app it installs.
 #
-# homebrew-cask proper has notability requirements (roughly 30+ stars/forks),
-# so treat submitting upstream as a later milestone.
+# homebrew-cask proper has notability requirements, roughly 30+ stars or forks,
+# so submitting upstream is a later milestone.
 cask "ipbar" do
-  version "0.1.0"
-  sha256 "REPLACE_WITH_SHA256_PRINTED_BY_MAKE_RELEASE"
+  version "__VERSION__"
+  sha256 "__SHA256__"
 
   url "https://github.com/edcs/ipbar/releases/download/v#{version}/IPBar-#{version}.zip"
   name "IPBar"

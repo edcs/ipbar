@@ -24,7 +24,7 @@ head every time. Tell IPBar it's called "Office" and the menu bar says `Office`.
 Requires macOS 14 (Sonoma) or later, on Apple silicon or Intel.
 
 ```sh
-brew install --cask edcs/tap/ipbar   # once published
+brew install --cask edcs/tap/ipbar
 ```
 
 Or build it yourself:
