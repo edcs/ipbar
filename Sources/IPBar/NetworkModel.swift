@@ -107,8 +107,8 @@ final class NetworkModel {
 
         switch preferences.displaySource {
         case .localAddress:
-            guard let kind = primaryLocal?.kind else { return .none }
-            return .interface(kind.menuBarSymbol)
+            guard primaryLocal != nil else { return .none }
+            return .interface(MenuBarGlyph.localNetworkSymbol)
         case .publicAddress, .both:
             // Falls back to the local address when the public one is unknown,
             // so the flag has to go with it.

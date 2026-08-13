@@ -20,6 +20,15 @@ enum MenuBarGlyph {
         case interface(String)
     }
 
+    /// Marks a local address as being on your own network.
+    ///
+    /// Not `wifi`: macOS already shows that in the menu bar, so it read as a
+    /// second Wi-Fi indicator rather than a fact about the address. Not
+    /// `network` either, which is a globe and means the opposite of local. A
+    /// device attached to a network line says it without borrowing either, and
+    /// it holds up whether you are on Wi-Fi or Ethernet.
+    nonisolated static let localNetworkSymbol = "rectangle.connected.to.line.below"
+
     private static var cache: [String: NSImage] = [:]
 
     static func image(qualifier: Qualifier, vpnSymbol: String?, muted: Bool,
@@ -67,7 +76,7 @@ enum MenuBarGlyph {
     /// slightly, though: matching the neighbouring system icons instead made it
     /// tower over the address. Derived from the flag so the two stay in step
     /// when the menu bar text size changes.
-    static var symbolInkHeight: CGFloat { FlagStore.menuBarFlagHeight + 1 }
+    nonisolated static var symbolInkHeight: CGFloat { FlagStore.menuBarFlagHeight + 1 }
 
     /// Scales a symbol so the mark it actually draws is `inkHeight` tall.
     ///
@@ -168,15 +177,3 @@ enum MenuBarGlyph {
     }
 }
 
-extension NetworkInterface.Kind {
-    /// Stands in for the flag when a local address is on show.
-    var menuBarSymbol: String {
-        switch self {
-        case .wifi: return "wifi"
-        case .ethernet: return "cable.connector"
-        case .cellular: return "antenna.radiowaves.left.and.right"
-        case .tunnel: return "lock.shield"
-        case .loopback, .virtual, .other: return "network"
-        }
-    }
-}

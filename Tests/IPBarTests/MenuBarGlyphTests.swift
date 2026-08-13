@@ -30,7 +30,7 @@ struct MenuBarGlyphTests {
         // A canvas fixed at the flag's height silently cropped symbols, whose
         // boxes are taller than the flag at any comparable size.
         let withSymbol = try #require(MenuBarGlyph.image(
-            qualifier: .interface("cable.connector"), vpnSymbol: nil, muted: false, store: store))
+            qualifier: .interface(MenuBarGlyph.localNetworkSymbol), vpnSymbol: nil, muted: false, store: store))
         #expect(withSymbol.size.height >= MenuBarGlyph.symbolInkHeight)
 
         // But never so tall that it crowds the menu bar.
@@ -39,7 +39,7 @@ struct MenuBarGlyphTests {
     }
 
     @Test("symbols land at the same ink height regardless of shape", arguments: [
-        "wifi", "cable.connector", "antenna.radiowaves.left.and.right", "lock.fill"
+        MenuBarGlyph.localNetworkSymbol, "cable.connector", "wifi", "lock.fill"
     ])
     func consistentInkHeight(_ symbol: String) throws {
         // At one point size these ink between 10pt and 13pt, which is why they
@@ -75,7 +75,7 @@ struct MenuBarGlyphTests {
     @Test("symbols alone stay a template so the system tints them")
     func symbolsStayTemplate() throws {
         let interface = try #require(MenuBarGlyph.image(
-            qualifier: .interface("wifi"), vpnSymbol: nil, muted: false, store: store))
+            qualifier: .interface(MenuBarGlyph.localNetworkSymbol), vpnSymbol: nil, muted: false, store: store))
         #expect(interface.isTemplate)
 
         let vpnOnly = try #require(MenuBarGlyph.image(
@@ -114,17 +114,19 @@ struct MenuBarGlyphTests {
     }
 }
 
-@Suite("Interface symbols")
-struct InterfaceSymbolTests {
-    @Test("every interface kind maps to a real SF Symbol")
-    func symbolsExist() {
-        let kinds: [NetworkInterface.Kind] = [
-            .wifi, .ethernet, .cellular, .tunnel, .loopback, .virtual, .other
-        ]
-        for kind in kinds {
-            let name = kind.menuBarSymbol
-            #expect(NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil,
-                    "\(name) is not a valid SF Symbol")
-        }
+@Suite("Local network symbol")
+struct LocalSymbolTests {
+    @Test("the local symbol is a real SF Symbol")
+    func symbolExists() {
+        #expect(NSImage(systemSymbolName: MenuBarGlyph.localNetworkSymbol,
+                        accessibilityDescription: nil) != nil)
+    }
+
+    @Test("it is not the system's own Wi-Fi glyph")
+    func notWiFi() {
+        // macOS already shows wifi in the menu bar; reusing it made this read
+        // as a duplicate indicator rather than a fact about the address.
+        #expect(MenuBarGlyph.localNetworkSymbol != "wifi")
+        #expect(!MenuBarGlyph.localNetworkSymbol.hasPrefix("wifi"))
     }
 }

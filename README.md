@@ -92,14 +92,16 @@ full-colour flag sits next to monochrome system icons.
 
 A flag describes where your *public* address is, so it would say something untrue beside a
 local one. When the menu bar is set to show a local address, you get that interface's icon
-instead: Wi-Fi, Ethernet, or cellular.
+instead. It is deliberately not the Wi-Fi glyph, since macOS already shows one of those
+in the menu bar and a second would read as a duplicate indicator rather than a fact about
+the address.
 
 ## Development
 
 ```sh
 make hooks           # enable the commit-message hook, once per clone
 swift build          # compile
-swift test           # 39 tests, no network needed
+swift test           # 43 tests, no network needed
 make icon            # redraw the icon and compile the .icns
 make app             # universal .app in dist/
 make run             # build and launch
