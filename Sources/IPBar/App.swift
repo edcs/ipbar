@@ -13,6 +13,7 @@ struct IPBarApp: App {
 
     init() {
         Diagnostics.runIfRequested()
+        StatusItemProbe.startIfRequested()
         let preferences = Preferences()
         _preferences = State(initialValue: preferences)
         _model = State(initialValue: NetworkModel(preferences: preferences))
@@ -22,9 +23,10 @@ struct IPBarApp: App {
         MenuBarExtra {
             MenuContent(model: model, preferences: preferences)
         } label: {
-            // Status, then content, then qualifier: the VPN symbol prefixes as
-            // a status conventionally does, while the flag follows the address
-            // it qualifies rather than preceding it.
+            // MenuBarExtra reduces this to a status item title plus a single
+            // image, so the order written here is not the order drawn and any
+            // padding is discarded. MenuBarLayout moves the image after the
+            // title; the gap before the flag is baked into the image.
             HStack(spacing: 4) {
                 if let symbol = model.menuBarSymbol {
                     Image(systemName: symbol)
@@ -35,17 +37,15 @@ struct IPBarApp: App {
                    let flag = FlagStore.shared.menuBarImage(for: country,
                                                             muted: preferences.mutedFlag) {
                     Image(nsImage: flag)
-                        // Wider than the gap between the status symbol and the
-                        // address: that pair reads as one unit, whereas the
-                        // flag is a separate qualifier and wants to sit apart.
-                        .padding(.leading, 6)
-                        // Centring on the line box sits the flag optically low,
-                        // because the box carries descender space the caps do
-                        // not. The extra bottom padding lifts it back.
-                        .padding(.bottom, 1)
                 }
             }
-            .task { model.start() }
+            .task {
+                model.start()
+                MenuBarLayout.placeFlagAfterAddress()
+            }
+            // SwiftUI puts imagePosition back whenever the label changes.
+            .onChange(of: model.menuBarText) { MenuBarLayout.placeFlagAfterAddress() }
+            .onChange(of: model.country) { MenuBarLayout.placeFlagAfterAddress() }
         }
         .menuBarExtraStyle(.window)
 

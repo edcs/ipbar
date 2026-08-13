@@ -80,6 +80,11 @@ final class FlagStore: @unchecked Sendable {
         NSFont.menuBarFont(ofSize: 0).capHeight.rounded()
     }
 
+    /// Space between the address and the flag, carried as transparent margin
+    /// inside the image: an `NSStatusItem` button puts no gap between its title
+    /// and its image, and SwiftUI discards padding applied to the view.
+    static let menuBarFlagGap: CGFloat = 5
+
     /// A flag as tall as the full line box reads as a block beside the type
     /// rather than a companion mark, so the default is cap height instead.
     func menuBarImage(for country: String, muted: Bool,
@@ -101,7 +106,11 @@ final class FlagStore: @unchecked Sendable {
     private func renderForMenuBar(country: String, muted: Bool, height: CGFloat) -> NSImage? {
         guard let base = flag(for: country) else { return nil }
 
-        let size = NSSize(width: (height * 4 / 3).rounded(), height: height)
+        let flag = NSSize(width: (height * 4 / 3).rounded(), height: height)
+
+        let gap = Self.menuBarFlagGap
+        let size = NSSize(width: flag.width + gap, height: flag.height)
+
         let scale: CGFloat = 2   // menu bars are Retina; draw at 2x and let AppKit pick
         guard let rep = NSBitmapImageRep(
             bitmapDataPlanes: nil,
@@ -114,7 +123,7 @@ final class FlagStore: @unchecked Sendable {
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
         NSGraphicsContext.current?.imageInterpolation = .high
-        let bounds = NSRect(origin: .zero, size: size)
+        let bounds = NSRect(x: gap, y: 0, width: flag.width, height: flag.height)
         NSBezierPath(roundedRect: bounds, xRadius: 1.5, yRadius: 1.5).addClip()
         base.draw(in: bounds)
 

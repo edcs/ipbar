@@ -65,11 +65,25 @@ struct MenuBarFlagTests {
         return rep.colorAt(x: rep.pixelsWide / 2, y: rep.pixelsHigh / 2)
     }
 
-    @Test("renders at a menu bar size with a 4:3 ratio")
+    @Test("the flag is 4:3 with the gap carried as margin")
     func size() throws {
         let image = try #require(store.menuBarImage(for: "gb", muted: false, height: 12))
         #expect(image.size.height == 12)
-        #expect(image.size.width == 16)
+        // 12 * 4/3 for the flag, plus transparent margin standing in for the
+        // spacing an NSStatusItem button will not provide.
+        #expect(image.size.width == 16 + FlagStore.menuBarFlagGap)
+    }
+
+    @Test("the gap is transparent, not painted")
+    func gapIsClear() throws {
+        let image = try #require(store.menuBarImage(for: "gb", muted: false, height: 12))
+        let rep = try #require(image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
+        // Sample inside the margin, which sits at the leading edge.
+        let inGap = try #require(rep.colorAt(x: 1, y: rep.pixelsHigh / 2))
+        #expect(inGap.alphaComponent == 0)
+
+        let inFlag = try #require(rep.colorAt(x: rep.pixelsWide - 4, y: rep.pixelsHigh / 2))
+        #expect(inFlag.alphaComponent > 0.5)
     }
 
     @Test("is not a template, so the colour survives the menu bar")
