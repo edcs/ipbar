@@ -9,9 +9,10 @@
 // segmented (four bars, three dots); the name on the tag is one continuous bar,
 // because a name is one word. The tag covers the number — which is the app.
 
-import AppKit
 import CoreGraphics
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 
 // MARK: - Palette
 // Drawn from patch-panel and label-tape hardware rather than the blue-globe
@@ -168,9 +169,6 @@ func drawIcon(into ctx: CGContext, size: CGFloat) {
 
 // MARK: - Output
 
-let root = URL(fileURLWithPath: CommandLine.arguments.first.map {
-    URL(fileURLWithPath: $0).deletingLastPathComponent().deletingLastPathComponent().path
-} ?? ".")
 let iconset = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
     .appendingPathComponent("Resources/AppIcon.iconset")
 try? FileManager.default.createDirectory(at: iconset, withIntermediateDirectories: true)
@@ -192,11 +190,18 @@ for variant in variants {
     }
     drawIcon(into: ctx, size: CGFloat(variant.pixels))
 
-    guard let image = ctx.makeImage() else { fatalError("render failed") }
-    let rep = NSBitmapImageRep(cgImage: image)
-    rep.size = NSSize(width: variant.pixels, height: variant.pixels)
-    guard let png = rep.representation(using: .png, properties: [:]) else { fatalError("encode failed") }
-    try png.write(to: iconset.appendingPathComponent("\(variant.name).png"))
+    guard let image = ctx.makeImage() else { fatalError("render failed at \(variant.pixels)px") }
+
+    // ImageIO rather than NSBitmapImageRep: this runs in CI, and a build-time
+    // image tool should not drag in AppKit.
+    let url = iconset.appendingPathComponent("\(variant.name).png") as CFURL
+    guard let destination = CGImageDestinationCreateWithURL(url, UTType.png.identifier as CFString, 1, nil) else {
+        fatalError("could not open \(variant.name).png for writing")
+    }
+    CGImageDestinationAddImage(destination, image, nil)
+    guard CGImageDestinationFinalize(destination) else {
+        fatalError("could not encode \(variant.name).png")
+    }
 }
 
 print("wrote \(variants.count) images to Resources/AppIcon.iconset")
