@@ -1,5 +1,8 @@
-# Tagging v* builds, signs, notarizes and publishes a release, then points the
-# Homebrew tap at it. Nothing here needs running by hand.
+# Publishing a release builds, signs and notarizes the app, attaches it to that
+# release, and points the Homebrew tap at it.
+#
+# The release itself is made by create-release.yml when a v* tag is pushed. This
+# workflow is not called by that one: it starts because a release was published.
 #
 # Required repository secrets. ./Tools/setup-signing.sh uploads all of them:
 #   SIGNING_CERTIFICATE_P12  base64 of a Developer ID Application .p12
@@ -13,21 +16,31 @@
 name: Release
 
 on:
-  push:
-    tags: ["v*"]
+  release:
+    types: [published]
 
 permissions:
   contents: write
 
 jobs:
-  release:
+  build:
     runs-on: macos-15
     steps:
+      # Build the tag the release names, not whatever main happens to be.
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name }}
 
       - name: Derive version
         id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          case "$TAG" in
+            v[0-9]*) ;;
+            *) echo "::error::Tag $TAG is not a version tag"; exit 1 ;;
+          esac
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
       # Fail here rather than three minutes in, after a build, with a signing
       # error that reads like a code problem.
@@ -98,6 +111,13 @@ jobs:
           xcrun stapler validate dist/IPBar.app
           codesign --verify --strict --deep --verbose=2 dist/IPBar.app
 
+      - name: Attach the build to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: gh release upload "$TAG" "dist/IPBar-${VERSION}.zip" --clobber
+
       - name: Record checksum
         id: checksum
         env:
@@ -106,13 +126,7 @@ jobs:
           FILE="dist/IPBar-${VERSION}.zip"
           echo "sha256=$(shasum -a 256 "$FILE" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
-      - name: Publish release
-        uses: softprops/action-gh-release@v3
-        with:
-          files: dist/IPBar-${{ steps.version.outputs.version }}.zip
-          generate_release_notes: true
-
-      # Last, so the tap only ever points at a release that exists.
+      # Last, so the tap only ever points at a download that is already there.
       - name: Update the Homebrew tap
         env:
           TAP_TOKEN: ${{ secrets.TAP_TOKEN }}

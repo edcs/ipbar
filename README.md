@@ -187,6 +187,7 @@ Sources live in `Sources/IPBar/`.
 | `Tools/GenerateIcon.swift` | draws the app icon |
 | `Tools/setup-signing.sh` | one-time certificate and notarization setup |
 | `Tools/check-commits.sh` | runs the commit-msg hook over a range, used by CI |
+| `Tools/release-notes.sh` | turns commit subjects into release notes |
 | `.githooks/commit-msg` | the Conventional Commits rule, shared by hook and CI |
 
 ## The icon

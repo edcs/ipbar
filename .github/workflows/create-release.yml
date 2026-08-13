@@ -1,0 +1,44 @@
+# Tagging v* creates the GitHub release, with notes read off the Conventional
+# Commit subjects since the previous tag.
+#
+# Publishing that release is what builds and ships it, in release.yml. This
+# workflow does not call that one; the release event links them.
+#
+# A release created with the built-in GITHUB_TOKEN does not raise events that
+# start other workflows, which is GitHub stopping workflows from looping. Set a
+# RELEASE_TOKEN secret, a token that can write to this repo, and the build
+# starts on its own. Without one the release still appears, and publishing or
+# re-running it by hand starts the build.
+name: Create release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # notes are read from the whole history
+
+      - name: Write the notes
+        id: notes
+        env:
+          TAG: ${{ github.ref_name }}
+        run: ./Tools/release-notes.sh "" "$TAG" > release-notes.md
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes-file release-notes.md \
+            --verify-tag
+          echo "created $TAG"
