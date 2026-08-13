@@ -32,10 +32,10 @@ icon:
 
 ## Redraw the README screenshots, in both appearances
 screenshots: app
-	@mkdir -p Docs
+	@mkdir -p Screenshots
 	@for scheme in light dark; do \
 		IPBAR_PROBE=panel IPBAR_PANEL_SAMPLE=1 IPBAR_PANEL_SCHEME=$$scheme \
-		IPBAR_PANEL_OUT=Docs/panel-$$scheme.png IPBAR_STRIP_OUT=Docs/menubar-$$scheme.png \
+		IPBAR_PANEL_OUT=Screenshots/panel-$$scheme.png IPBAR_STRIP_OUT=Screenshots/menubar-$$scheme.png \
 		$(DIST)/$(BUNDLE)/Contents/MacOS/$(APP_NAME); \
 	done
 

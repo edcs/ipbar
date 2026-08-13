@@ -8,13 +8,13 @@ If you have a static IP, `203.0.113.42` isn't information. It's a lookup you do 
 head every time. Tell IPBar it's called "Office" and the menu bar says `Office`.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="Docs/menubar-dark.png">
-  <img alt="The menu bar reading Home, with a UK flag" src="Docs/menubar-light.png" width="132">
+  <source media="(prefers-color-scheme: dark)" srcset="Screenshots/menubar-dark.png">
+  <img alt="The menu bar reading Home, with a UK flag" src="Screenshots/menubar-light.png" width="132">
 </picture>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="Docs/panel-dark.png">
-  <img alt="The panel, showing a named public address, both public addresses, and the addresses on this Mac" src="Docs/panel-light.png" width="358">
+  <source media="(prefers-color-scheme: dark)" srcset="Screenshots/panel-dark.png">
+  <img alt="The panel, showing a named public address, both public addresses, and the addresses on this Mac" src="Screenshots/panel-light.png" width="358">
 </picture>
 
 - **Named addresses.** Map an address or CIDR block to a name. The most specific prefix
@@ -198,12 +198,12 @@ Sources live in `Sources/IPBar/`.
 | `Tools/setup-signing.sh` | one-time certificate and notarization setup |
 | `Tools/check-commits.sh` | runs the commit-msg hook over a range, used by CI |
 | `Tools/release-notes.sh` | turns commit subjects into release notes |
-| `Docs/` | the README screenshots, rendered by the app itself |
+| `Screenshots/` | the README screenshots, rendered by the app itself |
 | `.githooks/commit-msg` | the Conventional Commits rule, shared by hook and CI |
 
 ## The screenshots
 
-`Docs/` is written by the app rather than captured by hand:
+`Screenshots/` is written by the app rather than captured by hand:
 
 ```sh
 make screenshots
