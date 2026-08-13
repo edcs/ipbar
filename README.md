@@ -1,5 +1,7 @@
 # IPBar
 
+[![CI](https://github.com/edcs/ipbar/actions/workflows/ci.yml/badge.svg)](https://github.com/edcs/ipbar/actions/workflows/ci.yml)
+
 A macOS menu bar app that shows your IP address, and lets you give addresses names.
 
 If you have a static IP, `203.0.113.42` isn't information. It's a lookup you do in your
@@ -15,6 +17,8 @@ head every time. Tell IPBar it's called "Office" and the menu bar says `Office`.
 
 ## Install
 
+Requires macOS 14 (Sonoma) or later, on Apple silicon or Intel.
+
 ```sh
 brew install --cask edcs/tap/ipbar   # once published
 ```
@@ -24,6 +28,9 @@ Or build it yourself:
 ```sh
 make run
 ```
+
+IPBar has no dock icon and no window. Once it's running, everything lives in the menu bar
+item. Your settings are stored under `dev.ecs.IPBar`.
 
 ## Naming an address
 
@@ -67,17 +74,25 @@ reports, and you can compare it against `scutil --nwi`.
 make hooks           # enable the commit-message hook, once per clone
 swift build          # compile
 swift test           # 20 tests, no network needed
+make icon            # redraw the icon and compile the .icns
 make app             # universal .app in dist/
 make run             # build and launch
+make clean           # remove .build and dist
 ```
 
 There's no `.xcodeproj`. SwiftPM builds the binary and the `Makefile` assembles the bundle
 around it, so a clean checkout needs nothing but Xcode.
 
+Each architecture is built on its own and merged with `lipo`. The one-shot
+`swift build --arch arm64 --arch x86_64` goes through xcbuild, which fails on the CI
+runner's older Xcode, and per-triple builds use the ordinary SwiftPM build system instead.
+
 Commits follow [Conventional Commits](https://www.conventionalcommits.org). A shell hook
 checks them locally and CI runs the same script. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Layout
+
+Sources live in `Sources/IPBar/`.
 
 | File | Role |
 | --- | --- |
@@ -87,6 +102,10 @@ checks them locally and CI runs the same script. See [CONTRIBUTING.md](CONTRIBUT
 | `VPNState.swift` | tunnel inference described above |
 | `PublicIPService.swift` | family-pinned public IP lookup with fallbacks |
 | `NetworkModel.swift` | observable state, refreshed by `NWPathMonitor` |
+| `Preferences.swift` | settings and stored names, backed by `UserDefaults` |
+| `App.swift` | the `MenuBarExtra` scene and the settings window |
+| `MenuContent.swift` | the panel that opens from the menu bar |
+| `SettingsView.swift` | the General and Names tabs |
 | `Diagnostics.swift` | `--diagnose` output |
 | `Tools/GenerateIcon.swift` | draws the app icon |
 | `Tools/setup-signing.sh` | one-time certificate and notarization setup |
@@ -132,15 +151,8 @@ git tag v0.1.0 && git push --tags                                          # CI
 ```
 
 Both produce a signed, notarized, stapled `IPBar-0.1.0.zip` and print its SHA-256 for the
-Homebrew cask in `Casks/ipbar.rb`.
-
-### Why not fastlane
-
-`gym` builds through `xcodebuild` and needs an Xcode project, which this repo doesn't have.
-`notarize` wraps `notarytool`, which the Makefile already calls. `match` solves certificate
-sharing across a team. That's real value at team scale, but it means adding Ruby and a
-second private repo to manage a single certificate you touch once every five years.
-Everything that runs per release is already automated without it.
+Homebrew cask in `Casks/ipbar.rb`. Paste the version and checksum into that file and push
+it to the tap.
 
 ## Licence
 

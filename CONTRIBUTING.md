@@ -50,7 +50,7 @@ rebases work normally.
 ```
 feat(vpn): detect split tunnels via the default route
 fix(prefix): stop /12 blocks overflowing the octet mask
-docs: explain why fastlane is not used
+docs: state the minimum macOS version
 ```
 
 `make hooks` sets `core.hooksPath`. Git stores that per clone rather than in the repo, so
