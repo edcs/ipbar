@@ -40,6 +40,8 @@ final class Preferences {
     var mutedFlag: Bool { didSet { write(mutedFlag, .mutedFlag) } }
     var nameDisplay: NameDisplay { didSet { write(nameDisplay.rawValue, .nameDisplay) } }
     var refreshMinutes: Int { didSet { write(refreshMinutes, .refreshMinutes) } }
+    var notifyOnVPNWeakened: Bool { didSet { write(notifyOnVPNWeakened, .notifyOnVPNWeakened) } }
+    var notifyOnPublicIPChange: Bool { didSet { write(notifyOnPublicIPChange, .notifyOnPublicIPChange) } }
 
     var labels: [AddressLabel] {
         didSet {
@@ -66,6 +68,7 @@ final class Preferences {
     private enum Key: String {
         case displaySource, preferIPv6, showVPNIndicator, nameDisplay, refreshMinutes, labels
         case showFlagInMenuBar, mutedFlag
+        case notifyOnVPNWeakened, notifyOnPublicIPChange
     }
 
     private let defaults: UserDefaults
@@ -81,6 +84,10 @@ final class Preferences {
         nameDisplay = (defaults.string(forKey: Key.nameDisplay.rawValue)
             .flatMap(NameDisplay.init(rawValue:))) ?? .name
         refreshMinutes = defaults.object(forKey: Key.refreshMinutes.rawValue) as? Int ?? 10
+        // Default false, deliberately: turning one on is what triggers the
+        // only permission prompt this app has ever shown.
+        notifyOnVPNWeakened = defaults.bool(forKey: Key.notifyOnVPNWeakened.rawValue)
+        notifyOnPublicIPChange = defaults.bool(forKey: Key.notifyOnPublicIPChange.rawValue)
         labels = (defaults.data(forKey: Key.labels.rawValue))
             .flatMap { try? JSONDecoder().decode([AddressLabel].self, from: $0) } ?? []
         launchAtLogin = SMAppService.mainApp.status == .enabled

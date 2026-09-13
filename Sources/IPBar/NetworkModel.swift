@@ -27,10 +27,31 @@ final class NetworkModel {
     private var refreshTask: Task<Void, Never>?
     private var timerTask: Task<Void, Never>?
 
+    private let notifier: Notifier
+    private let confirmationDelay: Duration
+    /// The state a pending change is measured against.
+    ///
+    /// Frozen while a confirmation window is open — advancing it mid-window
+    /// would compare the change against itself and always come out silent.
+    private var notificationBaseline: NetworkSnapshot?
+    /// The most recent snapshot `noteChanges` was given, updated on every call
+    /// regardless of whether a window is open.
+    ///
+    /// `confirm(rescan: false)` reads this at close rather than whatever was
+    /// current when the window *opened* — mirroring `rescan: true`, which
+    /// always re-measures at close. Tests drive this by calling
+    /// `noteChangesForTesting` again mid-window instead of a live rescan.
+    private var latestObserved: NetworkSnapshot?
+    private var confirmationTask: Task<Void, Never>?
+
     init(preferences: Preferences,
-         gateway: @escaping @Sendable ([NetworkInterface]) -> NetworkKey? = GatewayScanner.current) {
+         gateway: @escaping @Sendable ([NetworkInterface]) -> NetworkKey? = GatewayScanner.current,
+         notifier: Notifier = SystemNotifier(),
+         confirmationDelay: Duration = .seconds(10)) {
         self.preferences = preferences
         self.gateway = gateway
+        self.notifier = notifier
+        self.confirmationDelay = confirmationDelay
     }
 
     // MARK: - Display
@@ -279,6 +300,9 @@ final class NetworkModel {
         // can find a key the one above missed. Keep both — removing either
         // reopens the gap the other exists to close.
         networkKey = await currentNetworkKey(for: scanned)
+
+        await noteChanges(current: NetworkSnapshot(publicIP: primaryPublic, vpn: vpn.mode),
+                          rescan: true)
     }
 
     /// Reads the gateway off the main actor.
@@ -303,5 +327,132 @@ final class NetworkModel {
         self.publicIPv6 = nil
         self.networkKey = key
         self.lastUpdated = Date()
+    }
+
+    /// Drives change detection with a supplied snapshot, skipping the network.
+    /// Used by tests only.
+    func noteChangesForTesting(snapshot: NetworkSnapshot) async {
+        await noteChanges(current: snapshot, rescan: false)
+    }
+
+    /// Closes a pending confirmation window immediately, running the same
+    /// close path the timer would have run at expiry (`rescan: false`,
+    /// reading `latestObserved`). Used by tests only.
+    ///
+    /// Ordering tests build the model with a delay so long it cannot expire
+    /// during the test, so the window opens for real and mid-window calls are
+    /// genuinely refused — then call this instead of racing the clock to make
+    /// it close. Cancel-then-await lets the scheduled task's own `defer` run
+    /// and clear `confirmationTask` before `confirm` runs, so a window opened
+    /// afterwards can't have its handle wiped out by the old task settling late.
+    func closeConfirmationWindowForTesting() async {
+        if let task = confirmationTask {
+            task.cancel()
+            await task.value
+        }
+        await confirm(rescan: false)
+    }
+
+    /// Used by tests only, to install labels the notification wording reads.
+    var preferencesForTesting: Preferences { preferences }
+
+    // MARK: - Change notifications
+
+    /// Compares the current state with the baseline and, if anything is worth
+    /// announcing, opens a confirmation window.
+    ///
+    /// One window covers every change, not one window per change: two facts do
+    /// not justify two timers. A change arriving mid-window is confirmed by the
+    /// existing deadline, so it gets less than the full delay — sooner than the
+    /// first, never later.
+    private func noteChanges(current: NetworkSnapshot, rescan: Bool) async {
+        latestObserved = current
+
+        guard let baseline = notificationBaseline else {
+            notificationBaseline = current
+            return
+        }
+
+        // A window is already open; it will pick this state up when it closes.
+        guard confirmationTask == nil else { return }
+
+        let pending = enabled(ChangeDetector.changes(from: baseline, to: current))
+        guard !pending.isEmpty else {
+            advanceBaseline(to: current)
+            return
+        }
+
+        guard confirmationDelay > .zero else {
+            await confirm(rescan: rescan)
+            return
+        }
+
+        confirmationTask = Task { [weak self] in
+            // Cleared here, in the task body, rather than in a `defer` inside
+            // `confirm`: every exit from this task — including the cancelled
+            // path below, which never reaches `confirm` — must clear the
+            // handle. Otherwise `noteChanges`'s `guard confirmationTask == nil`
+            // stays blocked forever.
+            defer { self?.confirmationTask = nil }
+            try? await Task.sleep(for: self?.confirmationDelay ?? .seconds(10))
+            guard !Task.isCancelled else { return }
+            await self?.confirm(rescan: rescan)
+        }
+    }
+
+    /// Re-measures against the frozen baseline and posts whatever still holds.
+    ///
+    /// A VPN that dropped and came back re-evaluates as no change at all; one
+    /// that dropped and half-recovered re-evaluates as the weakening it
+    /// actually is, rather than the stale one first seen.
+    private func confirm(rescan: Bool) async {
+        guard let baseline = notificationBaseline else { return }
+
+        // Re-scan rather than trust state that may be ten seconds old. Both calls
+        // are synchronous, cheap, and touch no network. Tests pass rescan: false,
+        // where `latestObserved` — whatever `noteChangesForTesting` was last
+        // given, including a call made mid-window — stands in for the live
+        // rescan, so they never read the developer's own VPN state.
+        let current: NetworkSnapshot
+        if rescan {
+            let mode = VPNState.detect(interfaces: InterfaceScanner.scan()).mode
+            current = NetworkSnapshot(publicIP: primaryPublic, vpn: mode)
+        } else {
+            current = latestObserved ?? baseline
+        }
+
+        for change in enabled(ChangeDetector.changes(from: baseline, to: current)) {
+            let name: String?
+            if case .publicIPChanged(_, let to) = change {
+                name = preferences.labels.name(for: to, scope: .publicAddress,
+                                               networkKey: networkKey)
+            } else {
+                name = nil
+            }
+            await notifier.post(change, newAddressName: name)
+        }
+
+        advanceBaseline(to: current)
+    }
+
+    /// A nil address never becomes a baseline: losing the internet is not an
+    /// address changing, and clearing it would lose the "from" that a later
+    /// notification has to name.
+    private func advanceBaseline(to current: NetworkSnapshot) {
+        notificationBaseline = NetworkSnapshot(
+            publicIP: current.publicIP ?? notificationBaseline?.publicIP,
+            vpn: current.vpn)
+    }
+
+    /// Drops changes whose toggle is off. Applied when deciding to open a
+    /// window and again when it closes, so a toggle switched off midway is
+    /// honoured rather than racing the deadline.
+    private func enabled(_ changes: [NetworkChange]) -> [NetworkChange] {
+        changes.filter {
+            switch $0 {
+            case .vpnWeakened: return preferences.notifyOnVPNWeakened
+            case .publicIPChanged: return preferences.notifyOnPublicIPChange
+            }
+        }
     }
 }

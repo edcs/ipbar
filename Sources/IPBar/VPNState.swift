@@ -15,8 +15,21 @@ import Foundation
 ///      tunnel is up, only some routes are (split tunnel — Tailscale and
 ///      similar mesh VPNs behave this way).
 struct VPNState: Equatable, Sendable {
-    enum Mode: String, Sendable {
+    enum Mode: String, CaseIterable, Sendable {
         case off, full, split
+
+        /// How much of your traffic this mode covers, lowest first.
+        ///
+        /// Written out rather than derived: the cases above are declared
+        /// `off, full, split`, so declaration order says the opposite of
+        /// coverage and relying on it would invert the whole rule.
+        var coverage: Int {
+            switch self {
+            case .off: return 0
+            case .split: return 1
+            case .full: return 2
+            }
+        }
     }
 
     var mode: Mode = .off

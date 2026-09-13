@@ -37,33 +37,23 @@ entry at all. `ServiceOrder` breaks the tie when Wi-Fi and Ethernet are both up.
 Design decisions and the spike that settled the mechanics are in
 [the design doc](docs/superpowers/specs/2026-09-13-name-networks-design.md).
 
-## Next — say when something changes
+## Done — say when something changes
 
-`NetworkModel` computes three facts and throws two of them away on every refresh. It knows
-the previous `publicIPv4`, and it overwrites it. It knows the previous `VPNState`, and it
-replaces it. The changes are the interesting part.
+Shipped. Two toggles, both off until asked for, so the permission prompt only ever follows a
+deliberate choice.
 
-**Your public IP changed.** Matters to anyone sitting behind an allowlist, running something
-at home, or maintaining a dynamic-DNS record. A transition from one address to another is a
-real event and currently passes in silence.
+The VPN rule turned out to be "protection decreased" rather than "dropped": a full tunnel
+degrading to a partial one leaves traffic in the clear without disconnecting, and a drop-only
+rule would have stayed silent through it.
 
-**Your VPN dropped.** `VPNState` already distinguishes `full`, `split` and `off`. A
-`full → off` transition is the highest-stakes fact this app computes, and right now the only
-way to learn it is to look at the menu bar at the right moment. This is the entry with the
-worst consequence for going unsaid.
+A change is held for ten seconds and re-measured before it is announced, because VPN clients
+reconnect on wake and on every network change, and a feature that cries wolf gets switched
+off.
 
-Both want the same mechanism, and the mechanism has a cost: `UNUserNotificationCenter`
-prompts for permission, and IPBar currently asks for nothing at all. Ways to spend less:
+Design decisions and the spike that settled the mechanics are in
+[the design doc](docs/superpowers/specs/2026-09-13-change-notifications-design.md).
 
-- Notifications off by default, with a Settings toggle that triggers the prompt when you
-  turn it on. Nobody who doesn't want this is ever asked.
-- Or no notifications at all — mark the change in the panel instead ("changed from
-  `203.0.113.41` 4m ago"). Cheaper, honest, but only seen if you open the panel, which
-  defeats the point for the VPN case.
-
-The VPN case probably justifies the prompt. The IP-change case probably doesn't on its own.
-
-## Then — finish the reachability story
+## Next — finish the reachability story
 
 Three small things, each completing a sentence the app already starts.
 
@@ -82,7 +72,7 @@ NAT an IPv6 address is the same string in both sections, so naming it in each wo
 address two names. `RowKey` is already scoped, so the remaining work is deciding what the
 panel shows, not how it stores it.
 
-## Later — reach and polish
+## Then — reach and polish
 
 | | |
 | --- | --- |

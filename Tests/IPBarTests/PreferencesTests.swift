@@ -54,3 +54,46 @@ struct PreferencesTests {
         #expect(second.labels.name(for: "1.2.3.4", scope: .publicAddress) == nil)
     }
 }
+
+@Suite("Notification toggles")
+@MainActor
+struct NotificationPreferenceTests {
+    private func freshDefaults() -> UserDefaults {
+        let name = "test-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defaults.removePersistentDomain(forName: name)
+        return defaults
+    }
+
+    @Test("both toggles are off until asked for")
+    func defaultsOff() {
+        // Off by default is what keeps the promise that IPBar asks the user
+        // for nothing: the permission prompt only ever follows a deliberate
+        // switch being turned on.
+        let preferences = Preferences(defaults: freshDefaults())
+        #expect(preferences.notifyOnVPNWeakened == false)
+        #expect(preferences.notifyOnPublicIPChange == false)
+    }
+
+    @Test("both toggles persist")
+    func persists() {
+        let defaults = freshDefaults()
+        let first = Preferences(defaults: defaults)
+        first.notifyOnVPNWeakened = true
+        first.notifyOnPublicIPChange = true
+
+        let second = Preferences(defaults: defaults)
+        #expect(second.notifyOnVPNWeakened)
+        #expect(second.notifyOnPublicIPChange)
+    }
+
+    @Test("turning one off again persists as off")
+    func persistsOff() {
+        let defaults = freshDefaults()
+        let first = Preferences(defaults: defaults)
+        first.notifyOnVPNWeakened = true
+        first.notifyOnVPNWeakened = false
+
+        #expect(Preferences(defaults: defaults).notifyOnVPNWeakened == false)
+    }
+}
