@@ -14,8 +14,10 @@ final class NetworkModel {
     private(set) var lastUpdated: Date?
     private(set) var isRefreshing = false
 
-    /// The network this Mac is on, read after the public IP fetch so the
-    /// gateway's ARP entry is populated by the traffic that lookup generates.
+    /// The network this Mac is on. Read both before and after the public-IP
+    /// fetch: before, so a warm ARP cache names it immediately rather than
+    /// waiting on the fetch; after, because the fetch's own traffic is what
+    /// populates the gateway's ARP entry when the interface was cold.
     private(set) var networkKey: NetworkKey?
 
     private let preferences: Preferences
@@ -256,6 +258,12 @@ final class NetworkModel {
         interfaces = scanned
         vpn = VPNState.detect(interfaces: scanned)
 
+        // Before the fetch too: on a named LAN with no internet the fetch
+        // below has to time out before it reads again, and a warm ARP cache
+        // already has everything this needs — read it now so the name isn't
+        // held back up to 8s waiting on a lookup it doesn't depend on.
+        networkKey = await currentNetworkKey(for: scanned)
+
         async let v4 = publicIP.fetch(.ipv4)
         async let v6 = publicIP.fetch(.ipv6)
         let (fetchedV4, fetchedV6) = await (v4, v6)
@@ -266,9 +274,22 @@ final class NetworkModel {
         country = fetchedV4?.country ?? fetchedV6?.country
         lastUpdated = Date()
 
-        // After the fetch, deliberately: the lookup routes through the gateway,
-        // which populates its ARP entry on a cold interface.
-        networkKey = gateway(scanned)
+        // After the fetch too, deliberately: on a cold interface the lookup's
+        // own traffic is what populates the gateway's ARP entry, so this read
+        // can find a key the one above missed. Keep both — removing either
+        // reopens the gap the other exists to close.
+        networkKey = await currentNetworkKey(for: scanned)
+    }
+
+    /// Reads the gateway off the main actor.
+    ///
+    /// The closure fans out to two `SCDynamicStoreCreate` calls, a regex key
+    /// list, N `CopyValue` calls and two `sysctl`s — cheap individually, but
+    /// enough to stall the menu bar on IPC if run inline here, especially
+    /// right after wake while configd is still settling.
+    private func currentNetworkKey(for scanned: [NetworkInterface]) async -> NetworkKey? {
+        let gateway = self.gateway
+        return await Task.detached { gateway(scanned) }.value
     }
 
     /// Sets the state the menu bar is derived from, without touching the

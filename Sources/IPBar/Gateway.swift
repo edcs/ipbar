@@ -108,6 +108,11 @@ enum GatewayScanner {
     ///
     /// Entries with `sdl_alen != 6` are incomplete — exactly the rows `arp -a`
     /// prints as `(incomplete)` — and are skipped.
+    ///
+    /// `SCDynamicStore` also exposes an undocumented per-service
+    /// `ARPResolvedHardwareAddress`, which matched this walk byte-for-byte
+    /// during development. The route-socket walk is preferred anyway: it is
+    /// what `arp(8)` itself does, and it relies on no private key.
     static func arpTable() -> [String: String] {
         var mib: [Int32] = [CTL_NET, PF_ROUTE, 0, AF_INET, NET_RT_FLAGS, RTF_LLINFO]
         var needed = 0
@@ -121,6 +126,9 @@ enum GatewayScanner {
             guard let base = raw.baseAddress else { return }
             var offset = 0
             while offset < needed {
+                // Same discipline as the sockaddr reads below: check remaining
+                // space before dereferencing, rather than after.
+                guard offset + MemoryLayout<rt_msghdr>.stride <= needed else { break }
                 let header = base.advanced(by: offset)
                     .assumingMemoryBound(to: rt_msghdr.self)
                 let length = Int(header.pointee.rtm_msglen)
@@ -149,10 +157,16 @@ enum GatewayScanner {
                 guard addressLength == 6 else { continue }
 
                 let nameLength = Int(link.pointee.sdl_nlen)
+                // `sdl_data` is a fixed 12-byte tuple. ARP `LLINFO` rows carry
+                // `sdl_nlen == 0`, so this never trips today, but nothing
+                // guarantees that — skip rather than trap if it ever did.
+                guard nameLength + addressLength <= 12 else { continue }
                 let mac = withUnsafeBytes(of: link.pointee.sdl_data) { bytes in
                     GatewaySelection.formatMAC((0..<addressLength).map { bytes[nameLength + $0] })
                 }
-                result[String(cString: host)] = mac
+                let address = String(decoding: host.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) },
+                                     as: UTF8.self)
+                result[address] = mac
             }
         }
         return result
