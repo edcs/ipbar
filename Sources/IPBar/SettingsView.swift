@@ -53,9 +53,12 @@ struct SettingsView: View {
                         // Captured when the network was named, not typed. A bare
                         // MAC is not something anyone can check, so the row shows
                         // where it was seen instead; --diagnose prints the key.
+                        // A blank Name here leaves the network silently
+                        // unlabelled everywhere it would otherwise show — the
+                        // same signal an invalid address gets below.
                         Text(label.descriptor ?? "Network")
                             .font(.system(.body, design: .rounded))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(label.isValid ? Color.secondary : Color.red)
                     } else {
                         TextField("203.0.113.42", text: $label.patternText)
                             .textFieldStyle(.plain)

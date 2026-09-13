@@ -83,6 +83,11 @@ struct MenuContent: View {
                     // Keep asking briefly and stop as soon as it takes.
                     .task(id: editingNetwork) {
                         for _ in 0..<12 {
+                            // `try? await Task.sleep` swallows cancellation, so
+                            // without this check Escape closing the editor
+                            // leaves the loop spinning and setting focus on a
+                            // field that no longer exists.
+                            guard !Task.isCancelled else { return }
                             if nameFieldFocused { return }
                             nameFieldFocused = true
                             try? await Task.sleep(for: .milliseconds(40))
@@ -384,6 +389,10 @@ struct MenuContent: View {
         // stop as soon as it takes.
         .task(id: key) {
             for _ in 0..<12 {
+                // `try? await Task.sleep` swallows cancellation, so without
+                // this check Escape closing the editor leaves the loop
+                // spinning and setting focus on a field that no longer exists.
+                guard !Task.isCancelled else { return }
                 if nameFieldFocused { return }
                 nameFieldFocused = true
                 try? await Task.sleep(for: .milliseconds(40))
