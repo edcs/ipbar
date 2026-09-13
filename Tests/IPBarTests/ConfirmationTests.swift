@@ -61,17 +61,6 @@ struct ConfirmationTests {
         #expect(await spy.changes == [.vpnWeakened(from: .full, to: .off)])
     }
 
-    @Test("a blip that heals is never announced")
-    func blipHeals() async {
-        // full → off → full re-evaluates against the baseline as full → full,
-        // which is not a weakening at all.
-        let spy = SpyNotifier()
-        let model = self.model(notifier: spy)
-        await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .full))
-        await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .full))
-        #expect(await spy.changes.isEmpty)
-    }
-
     @Test("a partial recovery is announced as what it actually is")
     func partialRecovery() async {
         // full → off → split must announce full → split, not the stale full → off.
@@ -152,9 +141,10 @@ struct ConfirmationTests {
     // MARK: - The real Task-based window
 
     // A zero delay takes the synchronous branch in `noteChanges`, which never
-    // assigns `confirmationTask` at all. These three run with a real, if
-    // short, delay so the scheduled `Task` actually executes and the guards
-    // that only matter while it is in flight get exercised.
+    // assigns `confirmationTask` at all. The tests below run with a real, if
+    // short, delay so the scheduled `Task` actually executes and `confirm`
+    // re-measures at close rather than replaying the snapshot the window
+    // opened on.
 
     @Test("a change posts after the delay, not before")
     func postsAfterDelayNotBefore() async {
@@ -178,7 +168,43 @@ struct ConfirmationTests {
         await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .split))
 
         try? await Task.sleep(for: .milliseconds(150))
-        #expect(await spy.changes.count == 1)
+        // Not just one post — the *right* one: the window must re-measure at
+        // close and report the split it was last actually given, not the
+        // stale off it opened on.
+        #expect(await spy.changes == [.vpnWeakened(from: .full, to: .split)])
+    }
+
+    @Test("a blip that heals during the window is never announced")
+    func blipHeals() async {
+        // full → off → full, with the window still open when the last full
+        // arrives. Production re-measures at close and sees full → full,
+        // which is not a weakening at all — so nothing should be posted.
+        // Against a seam that replays the stale opening snapshot instead,
+        // this posts "VPN disconnected": the exact false alarm the
+        // confirmation window exists to prevent.
+        let spy = SpyNotifier()
+        let model = self.model(notifier: spy, delay: .milliseconds(50))
+        await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .full))
+        await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .off))
+        await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .full))
+
+        try? await Task.sleep(for: .milliseconds(150))
+        #expect(await spy.changes.isEmpty)
+    }
+
+    @Test("a partial recovery mid-window is announced as what it actually is")
+    func partialRecoveryMidWindow() async {
+        // full → off → split, with the window still open when the split
+        // arrives. Close must report full → split, not the stale full → off
+        // first seen when the window opened.
+        let spy = SpyNotifier()
+        let model = self.model(notifier: spy, delay: .milliseconds(50))
+        await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .full))
+        await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .off))
+        await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .split))
+
+        try? await Task.sleep(for: .milliseconds(150))
+        #expect(await spy.changes == [.vpnWeakened(from: .full, to: .split)])
     }
 
     @Test("a toggle switched off mid-window suppresses its notification")

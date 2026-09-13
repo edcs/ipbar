@@ -34,6 +34,14 @@ final class NetworkModel {
     /// Frozen while a confirmation window is open — advancing it mid-window
     /// would compare the change against itself and always come out silent.
     private var notificationBaseline: NetworkSnapshot?
+    /// The most recent snapshot `noteChanges` was given, updated on every call
+    /// regardless of whether a window is open.
+    ///
+    /// `confirm(rescan: false)` reads this at close rather than whatever was
+    /// current when the window *opened* — mirroring `rescan: true`, which
+    /// always re-measures at close. Tests drive this by calling
+    /// `noteChangesForTesting` again mid-window instead of a live rescan.
+    private var latestObserved: NetworkSnapshot?
     private var confirmationTask: Task<Void, Never>?
 
     init(preferences: Preferences,
@@ -340,6 +348,8 @@ final class NetworkModel {
     /// existing deadline, so it gets less than the full delay — sooner than the
     /// first, never later.
     private func noteChanges(current: NetworkSnapshot, rescan: Bool) async {
+        latestObserved = current
+
         guard let baseline = notificationBaseline else {
             notificationBaseline = current
             return
@@ -355,14 +365,20 @@ final class NetworkModel {
         }
 
         guard confirmationDelay > .zero else {
-            await confirm(current: current, rescan: rescan)
+            await confirm(rescan: rescan)
             return
         }
 
         confirmationTask = Task { [weak self] in
+            // Cleared here, in the task body, rather than in a `defer` inside
+            // `confirm`: every exit from this task — including the cancelled
+            // path below, which never reaches `confirm` — must clear the
+            // handle. Otherwise `noteChanges`'s `guard confirmationTask == nil`
+            // stays blocked forever.
+            defer { self?.confirmationTask = nil }
             try? await Task.sleep(for: self?.confirmationDelay ?? .seconds(10))
             guard !Task.isCancelled else { return }
-            await self?.confirm(current: current, rescan: rescan)
+            await self?.confirm(rescan: rescan)
         }
     }
 
@@ -371,20 +387,20 @@ final class NetworkModel {
     /// A VPN that dropped and came back re-evaluates as no change at all; one
     /// that dropped and half-recovered re-evaluates as the weakening it
     /// actually is, rather than the stale one first seen.
-    private func confirm(current known: NetworkSnapshot, rescan: Bool) async {
-        defer { confirmationTask = nil }
+    private func confirm(rescan: Bool) async {
         guard let baseline = notificationBaseline else { return }
 
         // Re-scan rather than trust state that may be ten seconds old. Both calls
-        // are synchronous, cheap, and touch no network. Tests pass rescan: false
-        // and supply the snapshot instead, so they never read the developer's own
-        // VPN state.
+        // are synchronous, cheap, and touch no network. Tests pass rescan: false,
+        // where `latestObserved` — whatever `noteChangesForTesting` was last
+        // given, including a call made mid-window — stands in for the live
+        // rescan, so they never read the developer's own VPN state.
         let current: NetworkSnapshot
         if rescan {
             let mode = VPNState.detect(interfaces: InterfaceScanner.scan()).mode
             current = NetworkSnapshot(publicIP: primaryPublic, vpn: mode)
         } else {
-            current = known
+            current = latestObserved ?? baseline
         }
 
         for change in enabled(ChangeDetector.changes(from: baseline, to: current)) {
