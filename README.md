@@ -177,6 +177,8 @@ runner's older Xcode, and per-triple builds use the ordinary SwiftPM build syste
 Commits follow [Conventional Commits](https://www.conventionalcommits.org). A shell hook
 checks them locally and CI runs the same script. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+[ROADMAP.md](ROADMAP.md) has what might come next, and what deliberately won't.
+
 ### Layout
 
 Sources live in `Sources/IPBar/`.
