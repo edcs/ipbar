@@ -126,16 +126,32 @@ extension Array where Element == AddressLabel {
         removeAll { $0.identity == AddressLabel(pattern: address, name: "", scope: scope).identity }
     }
 
-    /// Returns the name for `address`, preferring the most specific match so a
-    /// `/32` entry always beats the `/24` it sits inside.
-    func name(for address: String, scope: AddressLabel.Scope) -> String? {
-        compactMap { label -> (Int, String)? in
-            guard label.scope == .any || label.scope == scope else { return nil }
-            guard let prefix = label.prefix, prefix.contains(address) else { return nil }
+    /// Returns the name for `address`, preferring the most specific match.
+    ///
+    /// Specificity is a sortable tuple and the largest wins. Tier 2 is an exact
+    /// address, tier 1 a network key, tier 0 a block — so a `/32` beats a named
+    /// network, which in turn beats the `/24` it sits inside. Within a tier the
+    /// longer prefix wins, exactly as before.
+    func name(for address: String, scope: AddressLabel.Scope,
+              networkKey: NetworkKey? = nil) -> String? {
+        compactMap { label -> (tier: Int, length: Int, name: String)? in
             let trimmed = label.name.trimmingCharacters(in: .whitespaces)
-            return trimmed.isEmpty ? nil : (prefix.prefixLength, trimmed)
+            guard !trimmed.isEmpty else { return nil }
+
+            switch label.key {
+            case .prefix(let text):
+                guard label.scope == .any || label.scope == scope else { return nil }
+                guard let prefix = IPPrefix(text), prefix.contains(address) else { return nil }
+                return (prefix.isSingleAddress ? 2 : 0, prefix.prefixLength, trimmed)
+
+            case .network(let gateway, _):
+                // Scope is deliberately not consulted: a network name describes
+                // where you are, not which address you are using.
+                guard let networkKey, networkKey.gateway == gateway else { return nil }
+                return (1, 0, trimmed)
+            }
         }
-        .max { $0.0 < $1.0 }?
-        .1
+        .max { ($0.tier, $0.length) < ($1.tier, $1.length) }?
+        .name
     }
 }

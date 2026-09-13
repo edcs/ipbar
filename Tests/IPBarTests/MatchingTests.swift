@@ -241,3 +241,78 @@ struct LabelKindTests {
         #expect(decoded == labels)
     }
 }
+
+@Suite("Network label ranking")
+struct NetworkRankingTests {
+    private let home = NetworkKey(gateway: "74:24:9f:ab:0e:ab",
+                                  descriptor: "Wi-Fi · router 172.16.132.1")
+    private let elsewhere = NetworkKey(gateway: "00:11:22:33:44:55",
+                                       descriptor: "Wi-Fi · router 10.0.0.1")
+
+    private func network(_ name: String) -> AddressLabel {
+        AddressLabel(key: .network(gateway: "74:24:9f:ab:0e:ab",
+                                   descriptor: "Wi-Fi · router 172.16.132.1"),
+                     name: name)
+    }
+
+    @Test("an exact address beats a network")
+    func exactAddressWins() {
+        let labels = [network("Home"), AddressLabel(pattern: "203.0.113.42", name: "Static")]
+        #expect(labels.name(for: "203.0.113.42", scope: .publicAddress,
+                            networkKey: home) == "Static")
+    }
+
+    @Test("a network beats any block")
+    func networkBeatsBlocks() {
+        let labels = [
+            AddressLabel(pattern: "203.0.113.0/24", name: "Block"),
+            AddressLabel(pattern: "0.0.0.0/0", name: "Anywhere"),
+            network("Home")
+        ]
+        #expect(labels.name(for: "203.0.113.9", scope: .publicAddress,
+                            networkKey: home) == "Home")
+    }
+
+    @Test("a block still wins when no network key is supplied")
+    func withoutKey() {
+        let labels = [AddressLabel(pattern: "203.0.113.0/24", name: "Block"), network("Home")]
+        #expect(labels.name(for: "203.0.113.9", scope: .publicAddress) == "Block")
+        #expect(labels.name(for: "203.0.113.9", scope: .publicAddress,
+                            networkKey: nil) == "Block")
+    }
+
+    @Test("a network label on a different gateway does not match")
+    func wrongGateway() {
+        let labels = [network("Home")]
+        #expect(labels.name(for: "203.0.113.9", scope: .publicAddress,
+                            networkKey: elsewhere) == nil)
+    }
+
+    @Test("a network name applies to both scopes")
+    func ignoresScope() {
+        // Decision 6: a network name describes neither address, so it applies
+        // wherever — even when the stored scope says otherwise.
+        var label = network("Home")
+        label.scope = .localAddress
+        #expect([label].name(for: "203.0.113.9", scope: .publicAddress,
+                             networkKey: home) == "Home")
+        #expect([label].name(for: "192.168.1.5", scope: .localAddress,
+                             networkKey: home) == "Home")
+    }
+
+    @Test("a blank network name is ignored")
+    func blankName() {
+        #expect([network("   ")].name(for: "203.0.113.9", scope: .publicAddress,
+                                      networkKey: home) == nil)
+    }
+
+    @Test("longest prefix still decides between blocks")
+    func prefixOrderingUnchanged() {
+        let labels = [
+            AddressLabel(pattern: "203.0.113.0/24", name: "Narrow"),
+            AddressLabel(pattern: "203.0.0.0/16", name: "Wide")
+        ]
+        #expect(labels.name(for: "203.0.113.9", scope: .publicAddress,
+                            networkKey: home) == "Narrow")
+    }
+}
