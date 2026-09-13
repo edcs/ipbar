@@ -19,6 +19,15 @@ struct SettingsView: View {
             // since last time shows up here rather than leaving a toggle
             // quietly doing nothing.
             authorization = await notifier.authorizationStatus()
+            // A toggle still reading "on" beside the warning row below is the
+            // same fault as a menu bar that shows a local address as though
+            // the internet were fine — the toggle is what asserts "this is
+            // happening", and it cannot be, so it goes off with the
+            // permission rather than next to a caption explaining it doesn't.
+            if authorization == .denied {
+                preferences.notifyOnVPNWeakened = false
+                preferences.notifyOnPublicIPChange = false
+            }
         }
     }
 
