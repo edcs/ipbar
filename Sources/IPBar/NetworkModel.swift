@@ -243,6 +243,10 @@ final class NetworkModel {
         ]
         publicIPv4 = "203.0.113.42"
         publicIPv6 = "2001:db8:1738:0:870:ca09:920c:ef6c"
+        // Documentation addresses again, so the screenshots show the section
+        // without publishing whoever generated them.
+        router = "192.168.1.1"
+        dnsServers = ["192.168.1.1", "2001:db8:1738::1"]
         country = "GB"
         vpn = VPNState()
         lastUpdated = Date()

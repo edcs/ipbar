@@ -45,6 +45,7 @@ struct MenuContent: View {
                     networkRow(named: "")
                 }
                 publicSection
+                networkSection
                 localSection
             }
             .padding(.vertical, 10)
@@ -99,8 +100,14 @@ struct MenuContent: View {
             } else {
                 Text(name).font(.system(size: 12, weight: .semibold))
                 Spacer(minLength: 4)
-                if let descriptor = model.networkKey?.descriptor {
-                    Text(descriptor)
+                // Only the interface here. The descriptor also carries the
+                // router, which now has a row of its own below, and saying it
+                // twice would read as a bug rather than as confirmation.
+                // Settings still shows the whole descriptor, where it is what
+                // makes a stored network label verifiable.
+                if let interface = model.networkKey?.descriptor
+                    .split(separator: " · ").first.map(String.init) {
+                    Text(interface)
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }
@@ -141,6 +148,9 @@ struct MenuContent: View {
 
             if model.publicIPv4 == nil && model.publicIPv6 == nil {
                 placeholder(unreachableMessage)
+                if model.canOpenSignInPage {
+                    signInButton
+                }
             } else {
                 if let address = model.publicIPv4 {
                     row(kind: "IPv4", address: address, scope: .publicAddress,
@@ -152,6 +162,46 @@ struct MenuContent: View {
                 }
             }
         }
+    }
+
+    /// What this Mac reaches the internet *through*, as opposed to what it
+    /// holds. Absent entirely when neither fact is known — a section whose
+    /// rows all say "unknown" is worse than no section.
+    private var networkSection: some View {
+        Group {
+            if model.router != nil || !model.dnsServers.isEmpty {
+                sectionHeader("This Network") { EmptyView() }
+                if let router = model.router {
+                    row(kind: "Router", address: router, scope: .localAddress)
+                }
+                // Every resolver, in the order macOS consults them. A machine
+                // with three has three, and showing only the first would imply
+                // the others are not being asked.
+                ForEach(model.dnsServers, id: \.self) { server in
+                    row(kind: "DNS", address: server, scope: .localAddress)
+                }
+            }
+        }
+    }
+
+    /// Turns the panel's diagnosis into a fix.
+    ///
+    /// captive.apple.com is the probe macOS itself uses to decide whether a
+    /// network has working internet, so whatever is intercepting the
+    /// connection redirects it to the sign-in page. No detection of our own,
+    /// and nothing to go stale if a portal changes its address.
+    private var signInButton: some View {
+        Button("Open sign-in page") {
+            guard let url = URL(string: "http://captive.apple.com") else { return }
+            NSWorkspace.shared.open(url)
+        }
+        .buttonStyle(.plain)
+        .font(.system(size: 11, weight: .medium))
+        .padding(.horizontal, 9)
+        .padding(.vertical, 3)
+        .background(Color.accentColor.opacity(0.16), in: RoundedRectangle(cornerRadius: 6))
+        .padding(.horizontal, 14)
+        .padding(.bottom, 6)
     }
 
     private var localSection: some View {
@@ -253,10 +303,11 @@ struct MenuContent: View {
         let name = model.name(for: address, scope: key.scope)
         let justCopied = copied == key
         let isHovered = hovered == key
-        // Naming is limited to public addresses for now. Without NAT the same
-        // IPv6 appears in both sections, and letting it be named twice under
-        // two scopes gives one address two different names.
-        let canName = key.scope == .publicAddress
+        // Every address can be named. The old worry was that without NAT the
+        // same IPv6 sits in both sections and could take two names, but
+        // localGroups has collapsed an address out of "This Mac" when it is
+        // also the public one since 663c778, so no address appears twice.
+        let canName = true
 
         return Button {
             copy(key)
