@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import IPBar
 
@@ -154,5 +155,164 @@ struct VPNDetectionTests {
     @Test("no interfaces at all is not a VPN")
     func noInterfaces() {
         #expect(VPNState.detect(interfaces: []).mode == .off)
+    }
+}
+
+@Suite("Label kinds")
+struct LabelKindTests {
+    @Test("the pattern initialiser still builds an address label")
+    func patternInit() {
+        let label = AddressLabel(pattern: "203.0.113.42", name: "Office")
+        #expect(label.key == .prefix("203.0.113.42"))
+        #expect(label.isNetwork == false)
+        #expect(label.patternText == "203.0.113.42")
+        #expect(label.descriptor == nil)
+        #expect(label.prefix?.prefixLength == 32)
+    }
+
+    @Test("a network label carries a gateway and a descriptor")
+    func networkLabel() {
+        let label = AddressLabel(key: .network(gateway: "74:24:9f:ab:0e:ab",
+                                               descriptor: "Wi-Fi · router 172.16.132.1"),
+                                 name: "Home")
+        #expect(label.isNetwork)
+        #expect(label.descriptor == "Wi-Fi · router 172.16.132.1")
+        #expect(label.prefix == nil)
+        #expect(label.patternText == "")
+    }
+
+    @Test("a network label is valid despite having no prefix")
+    func networkIsValid() {
+        // A nil prefix paints an address row red in Settings. A network label
+        // has no prefix by construction and must not be flagged as broken.
+        let label = AddressLabel(key: .network(gateway: "aa:bb:cc:dd:ee:ff",
+                                               descriptor: "Wi-Fi · router 10.0.0.1"),
+                                 name: "Home")
+        #expect(label.isValid)
+    }
+
+    @Test("validity still rejects bad patterns and blank names")
+    func validityRules() {
+        #expect(AddressLabel(pattern: "203.0.113.42", name: "Office").isValid)
+        #expect(!AddressLabel(pattern: "garbage", name: "Office").isValid)
+        #expect(!AddressLabel(pattern: "203.0.113.42", name: "   ").isValid)
+        #expect(!AddressLabel(key: .network(gateway: "aa:bb:cc:dd:ee:ff",
+                                            descriptor: "x"), name: " ").isValid)
+    }
+
+    @Test("writing patternText edits an address label and ignores a network one")
+    func patternTextBinding() {
+        var address = AddressLabel(pattern: "10.0.0.1", name: "Box")
+        address.patternText = "10.0.0.2"
+        #expect(address.key == .prefix("10.0.0.2"))
+
+        var network = AddressLabel(key: .network(gateway: "aa:bb:cc:dd:ee:ff",
+                                                 descriptor: "Wi-Fi · router 10.0.0.1"),
+                                   name: "Home")
+        network.patternText = "nonsense"
+        #expect(network.key == .network(gateway: "aa:bb:cc:dd:ee:ff",
+                                        descriptor: "Wi-Fi · router 10.0.0.1"))
+    }
+
+    @Test("identity keys an address by pattern and scope, a network by gateway alone")
+    func identity() {
+        // Network labels have no scope, so scope must not enter their identity.
+        let a = AddressLabel(pattern: "10.0.0.1", name: "A", scope: .localAddress)
+        let b = AddressLabel(pattern: "10.0.0.1", name: "B", scope: .publicAddress)
+        #expect(a.identity != b.identity)
+
+        let key = AddressLabel.Key.network(gateway: "aa:bb:cc:dd:ee:ff", descriptor: "one")
+        let other = AddressLabel.Key.network(gateway: "aa:bb:cc:dd:ee:ff", descriptor: "two")
+        let c = AddressLabel(key: key, name: "Home", scope: .any)
+        let d = AddressLabel(key: other, name: "Home", scope: .localAddress)
+        #expect(c.identity == d.identity)
+    }
+
+    @Test("both kinds survive a Codable round trip")
+    func codableRoundTrip() throws {
+        let labels = [
+            AddressLabel(pattern: "192.168.1.0/24", name: "LAN", scope: .localAddress),
+            AddressLabel(key: .network(gateway: "74:24:9f:ab:0e:ab",
+                                       descriptor: "Wi-Fi · router 172.16.132.1"),
+                         name: "Home")
+        ]
+        let data = try JSONEncoder().encode(labels)
+        let decoded = try JSONDecoder().decode([AddressLabel].self, from: data)
+        #expect(decoded == labels)
+    }
+}
+
+@Suite("Network label ranking")
+struct NetworkRankingTests {
+    private let home = NetworkKey(gateway: "74:24:9f:ab:0e:ab",
+                                  descriptor: "Wi-Fi · router 172.16.132.1")
+    private let elsewhere = NetworkKey(gateway: "00:11:22:33:44:55",
+                                       descriptor: "Wi-Fi · router 10.0.0.1")
+
+    private func network(_ name: String) -> AddressLabel {
+        AddressLabel(key: .network(gateway: "74:24:9f:ab:0e:ab",
+                                   descriptor: "Wi-Fi · router 172.16.132.1"),
+                     name: name)
+    }
+
+    @Test("an exact address beats a network")
+    func exactAddressWins() {
+        let labels = [network("Home"), AddressLabel(pattern: "203.0.113.42", name: "Static")]
+        #expect(labels.name(for: "203.0.113.42", scope: .publicAddress,
+                            networkKey: home) == "Static")
+    }
+
+    @Test("a network beats any block")
+    func networkBeatsBlocks() {
+        let labels = [
+            AddressLabel(pattern: "203.0.113.0/24", name: "Block"),
+            AddressLabel(pattern: "0.0.0.0/0", name: "Anywhere"),
+            network("Home")
+        ]
+        #expect(labels.name(for: "203.0.113.9", scope: .publicAddress,
+                            networkKey: home) == "Home")
+    }
+
+    @Test("a block still wins when no network key is supplied")
+    func withoutKey() {
+        let labels = [AddressLabel(pattern: "203.0.113.0/24", name: "Block"), network("Home")]
+        #expect(labels.name(for: "203.0.113.9", scope: .publicAddress) == "Block")
+        #expect(labels.name(for: "203.0.113.9", scope: .publicAddress,
+                            networkKey: nil) == "Block")
+    }
+
+    @Test("a network label on a different gateway does not match")
+    func wrongGateway() {
+        let labels = [network("Home")]
+        #expect(labels.name(for: "203.0.113.9", scope: .publicAddress,
+                            networkKey: elsewhere) == nil)
+    }
+
+    @Test("a network name applies to both scopes")
+    func ignoresScope() {
+        // Decision 6: a network name describes neither address, so it applies
+        // wherever — even when the stored scope says otherwise.
+        var label = network("Home")
+        label.scope = .localAddress
+        #expect([label].name(for: "203.0.113.9", scope: .publicAddress,
+                             networkKey: home) == "Home")
+        #expect([label].name(for: "192.168.1.5", scope: .localAddress,
+                             networkKey: home) == "Home")
+    }
+
+    @Test("a blank network name is ignored")
+    func blankName() {
+        #expect([network("   ")].name(for: "203.0.113.9", scope: .publicAddress,
+                                      networkKey: home) == nil)
+    }
+
+    @Test("longest prefix still decides between blocks")
+    func prefixOrderingUnchanged() {
+        let labels = [
+            AddressLabel(pattern: "203.0.113.0/24", name: "Narrow"),
+            AddressLabel(pattern: "203.0.0.0/16", name: "Wide")
+        ]
+        #expect(labels.name(for: "203.0.113.9", scope: .publicAddress,
+                            networkKey: home) == "Narrow")
     }
 }

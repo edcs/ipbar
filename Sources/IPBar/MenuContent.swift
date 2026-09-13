@@ -31,10 +31,19 @@ struct MenuContent: View {
     @State private var editing: RowKey?
     @State private var draftName = ""
     @FocusState private var nameFieldFocused: Bool
+    @State private var hoveringLocalHeader = false
+    /// The network's own row, which has no address. Kept separate from RowKey
+    /// so the inline editor can target it without inventing a fake address.
+    @State private var editingNetwork = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
+                if let networkName = model.networkName {
+                    networkRow(named: networkName)
+                } else if editingNetwork {
+                    networkRow(named: "")
+                }
                 publicSection
                 localSection
             }
@@ -52,6 +61,62 @@ struct MenuContent: View {
     }
 
     // MARK: - Sections
+
+    /// The network's name, above everything else: once it replaces the address
+    /// in the menu bar it stops being one fact among several and becomes the
+    /// headline. A panel opening with "Public" while the bar says "Home" makes
+    /// you hunt for where the word came from.
+    ///
+    /// Absent entirely until a network is named, so anyone who only wanted an
+    /// IP address never sees it.
+    private func networkRow(named name: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            if editingNetwork {
+                TextField("Name this network", text: $draftName)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12, weight: .semibold))
+                    .focused($nameFieldFocused)
+                    .onSubmit { commitNetworkName() }
+                    .onExitCommand { editingNetwork = false }
+                    // Asking once is unreliable: on the first open the field is
+                    // not yet in the responder chain and the request is dropped.
+                    // Keep asking briefly and stop as soon as it takes.
+                    .task(id: editingNetwork) {
+                        for _ in 0..<12 {
+                            // `try? await Task.sleep` swallows cancellation, so
+                            // without this check Escape closing the editor
+                            // leaves the loop spinning and setting focus on a
+                            // field that no longer exists.
+                            guard !Task.isCancelled else { return }
+                            if nameFieldFocused { return }
+                            nameFieldFocused = true
+                            try? await Task.sleep(for: .milliseconds(40))
+                        }
+                    }
+                Text("↩ save · esc cancel")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+            } else {
+                Text(name).font(.system(size: 12, weight: .semibold))
+                Spacer(minLength: 4)
+                if let descriptor = model.networkKey?.descriptor {
+                    Text(descriptor)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 9)
+        .padding(.bottom, 7)
+        .contextMenu {
+            Button("Rename…") { beginNetworkNaming(current: name) }
+            Button("Remove Name") {
+                guard let key = model.networkKey else { return }
+                preferences.labels.setNetworkName("", for: key)
+            }
+        }
+    }
 
     private var publicSection: some View {
         Group {
@@ -91,7 +156,21 @@ struct MenuContent: View {
 
     private var localSection: some View {
         Group {
-            sectionHeader("This Mac") { EmptyView() }
+            sectionHeader("This Mac") {
+                // Primary path, mirroring the hover Name button on an address
+                // row. Hidden when no gateway resolves — cellular and tethered
+                // links have no ARP table, and an affordance that appears then
+                // fails is worse than one that is absent.
+                if model.networkKey != nil, model.networkName == nil, hoveringLocalHeader {
+                    Button("Name network") { beginNetworkNaming(current: "") }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 10))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 1)
+                        .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
+                }
+            }
+            .onHover { hoveringLocalHeader = $0 }
 
             if model.localGroups.isEmpty {
                 placeholder("No active network interfaces.")
@@ -261,6 +340,14 @@ struct MenuContent: View {
                     Button("Remove Name") { removeName(key) }
                 }
             }
+            // Secondary path, exactly as addresses get both a hover button and
+            // a context-menu entry.
+            if key.scope == .localAddress, model.networkKey != nil {
+                Divider()
+                Button(model.networkName == nil ? "Name This Network…" : "Rename Network…") {
+                    beginNetworkNaming(current: model.networkName ?? "")
+                }
+            }
         }
         .help("Copy \(address)")
         .accessibilityLabel("\(name ?? kind), \(address). Click to copy.")
@@ -302,6 +389,10 @@ struct MenuContent: View {
         // stop as soon as it takes.
         .task(id: key) {
             for _ in 0..<12 {
+                // `try? await Task.sleep` swallows cancellation, so without
+                // this check Escape closing the editor leaves the loop
+                // spinning and setting focus on a field that no longer exists.
+                guard !Task.isCancelled else { return }
                 if nameFieldFocused { return }
                 nameFieldFocused = true
                 try? await Task.sleep(for: .milliseconds(40))
@@ -406,6 +497,9 @@ struct MenuContent: View {
     private func beginNaming(_ key: RowKey, existing: String?) {
         draftName = existing ?? ""
         editing = key
+        // Symmetric with beginNetworkNaming: opening one editor must close
+        // the other, or both end up bound to the same draft and focus.
+        editingNetwork = false
     }
 
     private func cancelNaming() {
@@ -420,6 +514,18 @@ struct MenuContent: View {
 
     private func hasOwnLabel(_ key: RowKey) -> Bool {
         preferences.labels.hasOwnLabel(for: key.address, scope: key.scope)
+    }
+
+    private func beginNetworkNaming(current: String) {
+        draftName = current
+        editing = nil
+        editingNetwork = true
+    }
+
+    private func commitNetworkName() {
+        defer { editingNetwork = false }
+        guard let key = model.networkKey else { return }
+        preferences.labels.setNetworkName(draftName, for: key)
     }
 
     private func removeName(_ key: RowKey) {

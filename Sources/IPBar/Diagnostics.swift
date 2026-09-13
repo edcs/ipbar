@@ -13,6 +13,9 @@ enum Diagnostics {
         print("Primary interface  IPv4: \(InterfaceScanner.primaryInterface(family: .ipv4) ?? "none")")
         print("                   IPv6: \(InterfaceScanner.primaryInterface(family: .ipv6) ?? "none")")
         print("VPN                \(vpn.mode.rawValue) — \(vpn.summary)")
+        let networkKey = GatewayScanner.current(interfaces: interfaces)
+        print("Network            \(networkKey?.gateway ?? "none")")
+        print("                   \(networkKey?.descriptor ?? "no gateway — cellular, tethered, or offline")")
         print("")
         print("Interfaces")
         for interface in interfaces.sorted(by: { $0.bsdName < $1.bsdName }) {
@@ -48,11 +51,17 @@ enum Diagnostics {
         print("")
         print("Labels (\(labels.count))")
         for label in labels {
-            let valid = label.prefix == nil ? "  [invalid pattern]" : ""
-            print("  \(label.pattern) → \(label.name) [\(label.scope.rawValue)]\(valid)")
+            let valid = label.isValid ? "" : "  [invalid]"
+            switch label.key {
+            case .prefix(let text):
+                print("  \(text) → \(label.name) [\(label.scope.rawValue)]\(valid)")
+            case .network(let gateway, let descriptor):
+                print("  network \(gateway) (\(descriptor)) → \(label.name)\(valid)")
+            }
         }
         for address in [v4?.address, v6?.address].compactMap({ $0 }) {
-            let matched = labels.name(for: address, scope: .publicAddress) ?? "no match"
+            let matched = labels.name(for: address, scope: .publicAddress,
+                                      networkKey: networkKey) ?? "no match"
             print("  resolve \(address) → \(matched)")
         }
 

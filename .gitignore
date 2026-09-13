@@ -9,3 +9,11 @@ Resources/AppIcon.icns
 *.xcodeproj
 *.xcworkspace
 .DS_Store
+
+# Visual brainstorming mockups — scratch, not part of the build.
+.superpowers/
+
+# The global gitignore excludes "docs" and "docs/*" everywhere.
+# This repo keeps its design specs, so both rules are undone here.
+!docs/
+!docs/*

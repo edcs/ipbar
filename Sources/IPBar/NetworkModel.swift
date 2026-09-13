@@ -14,14 +14,23 @@ final class NetworkModel {
     private(set) var lastUpdated: Date?
     private(set) var isRefreshing = false
 
+    /// The network this Mac is on. Read both before and after the public-IP
+    /// fetch: before, so a warm ARP cache names it immediately rather than
+    /// waiting on the fetch; after, because the fetch's own traffic is what
+    /// populates the gateway's ARP entry when the interface was cold.
+    private(set) var networkKey: NetworkKey?
+
     private let preferences: Preferences
     private let publicIP = PublicIPService()
     private let monitor = NWPathMonitor()
+    private let gateway: @Sendable ([NetworkInterface]) -> NetworkKey?
     private var refreshTask: Task<Void, Never>?
     private var timerTask: Task<Void, Never>?
 
-    init(preferences: Preferences) {
+    init(preferences: Preferences,
+         gateway: @escaping @Sendable ([NetworkInterface]) -> NetworkKey? = GatewayScanner.current) {
         self.preferences = preferences
+        self.gateway = gateway
     }
 
     // MARK: - Display
@@ -92,7 +101,18 @@ final class NetworkModel {
     }
 
     func name(for address: String, scope: AddressLabel.Scope) -> String? {
-        preferences.labels.name(for: address, scope: scope)
+        preferences.labels.name(for: address, scope: scope, networkKey: networkKey)
+    }
+
+    /// The name of the network currently attached, for the panel's context row.
+    var networkName: String? {
+        guard let networkKey else { return nil }
+        let match = preferences.labels.first {
+            if case .network(let gateway, _) = $0.key { return gateway == networkKey.gateway }
+            return false
+        }
+        let trimmed = match?.name.trimmingCharacters(in: .whitespaces)
+        return (trimmed?.isEmpty == false) ? trimmed : nil
     }
 
     /// Applies a matching label, however the menu bar has been asked to show
@@ -118,6 +138,9 @@ final class NetworkModel {
         case .localAddress: return local ?? "No network"
         case .both:
             let parts = [local, remote].compactMap { $0 }
+            // A network name resolves for both halves, which would otherwise
+            // read "Home · Home".
+            if parts.count == 2, parts[0] == parts[1] { return parts[0] }
             return parts.isEmpty ? "No network" : parts.joined(separator: " · ")
         }
     }
@@ -235,6 +258,12 @@ final class NetworkModel {
         interfaces = scanned
         vpn = VPNState.detect(interfaces: scanned)
 
+        // Before the fetch too: on a named LAN with no internet the fetch
+        // below has to time out before it reads again, and a warm ARP cache
+        // already has everything this needs — read it now so the name isn't
+        // held back up to 8s waiting on a lookup it doesn't depend on.
+        networkKey = await currentNetworkKey(for: scanned)
+
         async let v4 = publicIP.fetch(.ipv4)
         async let v6 = publicIP.fetch(.ipv6)
         let (fetchedV4, fetchedV6) = await (v4, v6)
@@ -244,5 +273,35 @@ final class NetworkModel {
         publicIPv6 = fetchedV6?.address
         country = fetchedV4?.country ?? fetchedV6?.country
         lastUpdated = Date()
+
+        // After the fetch too, deliberately: on a cold interface the lookup's
+        // own traffic is what populates the gateway's ARP entry, so this read
+        // can find a key the one above missed. Keep both — removing either
+        // reopens the gap the other exists to close.
+        networkKey = await currentNetworkKey(for: scanned)
+    }
+
+    /// Reads the gateway off the main actor.
+    ///
+    /// The closure fans out to two `SCDynamicStoreCreate` calls, a regex key
+    /// list, N `CopyValue` calls and two `sysctl`s — cheap individually, but
+    /// enough to stall the menu bar on IPC if run inline here, especially
+    /// right after wake while configd is still settling.
+    private func currentNetworkKey(for scanned: [NetworkInterface]) async -> NetworkKey? {
+        let gateway = self.gateway
+        return await Task.detached { gateway(scanned) }.value
+    }
+
+    /// Sets the state the menu bar is derived from, without touching the
+    /// network. Used by tests only.
+    func applyForTesting(publicIPv4: String?, local: String?, key: NetworkKey?) {
+        interfaces = local.map {
+            [NetworkInterface(bsdName: "en0", address: $0, family: .ipv4,
+                              kind: .wifi, isLinkLocal: false, friendlyName: "Wi-Fi")]
+        } ?? []
+        self.publicIPv4 = publicIPv4
+        self.publicIPv6 = nil
+        self.networkKey = key
+        self.lastUpdated = Date()
     }
 }

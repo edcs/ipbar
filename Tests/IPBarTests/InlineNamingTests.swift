@@ -11,7 +11,7 @@ struct InlineNamingTests {
 
         #expect(labels.count == 1)
         #expect(labels.name(for: "203.0.113.42", scope: .publicAddress) == "Office")
-        #expect(labels.first?.pattern == "203.0.113.42")
+        #expect(labels.first?.key == .prefix("203.0.113.42"))
     }
 
     @Test("renaming updates in place rather than piling up duplicates")
@@ -99,5 +99,78 @@ struct InlineNamingTests {
         labels.setName("Home v6", for: "2a06:61c2:1738:0:e98d:4bd1:6925:4e84", scope: .publicAddress)
         #expect(labels.name(for: "2a06:61c2:1738:0:e98d:4bd1:6925:4e84",
                             scope: .publicAddress) == "Home v6")
+    }
+}
+
+@Suite("Naming a network")
+struct NetworkNamingTests {
+    private let home = NetworkKey(gateway: "74:24:9f:ab:0e:ab",
+                                  descriptor: "Wi-Fi · router 172.16.132.1")
+
+    @Test("naming a network appends one label carrying its descriptor")
+    func names() {
+        var labels: [AddressLabel] = []
+        labels.setNetworkName("Home", for: home)
+
+        #expect(labels.count == 1)
+        #expect(labels[0].name == "Home")
+        #expect(labels[0].key == .network(gateway: "74:24:9f:ab:0e:ab",
+                                          descriptor: "Wi-Fi · router 172.16.132.1"))
+    }
+
+    @Test("renaming the same network updates in place")
+    func renames() {
+        var labels: [AddressLabel] = []
+        labels.setNetworkName("Home", for: home)
+        labels.setNetworkName("House", for: home)
+
+        #expect(labels.count == 1)
+        #expect(labels[0].name == "House")
+    }
+
+    @Test("a descriptor that has drifted does not create a second label")
+    func descriptorDriftDoesNotDuplicate() {
+        // The gateway alone is the identity. If the router's address changes,
+        // the descriptor goes stale but the label must stay one label.
+        var labels: [AddressLabel] = []
+        labels.setNetworkName("Home", for: home)
+        labels.setNetworkName("Home", for: NetworkKey(gateway: "74:24:9f:ab:0e:ab",
+                                                      descriptor: "Wi-Fi · router 10.9.9.1"))
+        #expect(labels.count == 1)
+    }
+
+    @Test("clearing the name removes the label")
+    func clearing() {
+        var labels: [AddressLabel] = []
+        labels.setNetworkName("Home", for: home)
+        labels.setNetworkName("   ", for: home)
+        #expect(labels.isEmpty)
+    }
+
+    @Test("a network label does not collide with an address label")
+    func noCollisionWithAddresses() {
+        var labels = [AddressLabel(pattern: "203.0.113.42", name: "Office")]
+        labels.setNetworkName("Home", for: home)
+        #expect(labels.count == 2)
+    }
+
+    @Test("removing a network name leaves address labels alone")
+    func removal() {
+        var labels = [AddressLabel(pattern: "203.0.113.42", name: "Office")]
+        labels.setNetworkName("Home", for: home)
+        labels.removeLabel(forKey: .network(gateway: home.gateway, descriptor: home.descriptor),
+                           scope: .any)
+        #expect(labels.count == 1)
+        #expect(labels[0].name == "Office")
+    }
+
+    @Test("hasOwnLabel finds a named network")
+    func ownership() {
+        var labels: [AddressLabel] = []
+        #expect(!labels.hasOwnLabel(forKey: .network(gateway: home.gateway,
+                                                     descriptor: home.descriptor), scope: .any))
+        labels.setNetworkName("Home", for: home)
+        #expect(labels.hasOwnLabel(forKey: .network(gateway: home.gateway,
+                                                    descriptor: home.descriptor), scope: .any))
     }
 }
