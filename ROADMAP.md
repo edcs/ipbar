@@ -21,7 +21,8 @@ Every entry has to pass the same test the app already applies to itself:
 
 v0.1.0 does the thing it set out to do. Named addresses, VPN state, public and local
 addresses, country flag, an honest offline state, and a signed and notarised release
-through a Homebrew tap. Around 2,200 lines and 75 tests.
+through a Homebrew tap. Small enough to read in a sitting, and covered by tests that
+need no network.
 
 The gaps below are not bugs. They're the next honest things to say.
 
