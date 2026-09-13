@@ -488,6 +488,9 @@ struct MenuContent: View {
     private func beginNaming(_ key: RowKey, existing: String?) {
         draftName = existing ?? ""
         editing = key
+        // Symmetric with beginNetworkNaming: opening one editor must close
+        // the other, or both end up bound to the same draft and focus.
+        editingNetwork = false
     }
 
     private func cancelNaming() {
