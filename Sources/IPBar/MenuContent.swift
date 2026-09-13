@@ -78,6 +78,16 @@ struct MenuContent: View {
                     .focused($nameFieldFocused)
                     .onSubmit { commitNetworkName() }
                     .onExitCommand { editingNetwork = false }
+                    // Asking once is unreliable: on the first open the field is
+                    // not yet in the responder chain and the request is dropped.
+                    // Keep asking briefly and stop as soon as it takes.
+                    .task(id: editingNetwork) {
+                        for _ in 0..<12 {
+                            if nameFieldFocused { return }
+                            nameFieldFocused = true
+                            try? await Task.sleep(for: .milliseconds(40))
+                        }
+                    }
                 Text("↩ save · esc cancel")
                     .font(.system(size: 9))
                     .foregroundStyle(.tertiary)
@@ -498,13 +508,6 @@ struct MenuContent: View {
         draftName = current
         editing = nil
         editingNetwork = true
-        // Asking once is unreliable: on the first open the field is not yet in
-        // the hierarchy. The same two-step the address editor uses.
-        nameFieldFocused = true
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(50))
-            nameFieldFocused = true
-        }
     }
 
     private func commitNetworkName() {
