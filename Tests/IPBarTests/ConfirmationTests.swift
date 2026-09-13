@@ -25,7 +25,7 @@ actor SpyNotifier: Notifier {
 @MainActor
 struct ConfirmationTests {
     private func model(vpn: Bool = true, ip: Bool = true,
-                       notifier: SpyNotifier) -> NetworkModel {
+                       notifier: SpyNotifier, delay: Duration = .zero) -> NetworkModel {
         let name = "test-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
         defaults.removePersistentDomain(forName: name)
@@ -37,7 +37,7 @@ struct ConfirmationTests {
         return NetworkModel(preferences: preferences,
                             gateway: { _ in nil },
                             notifier: notifier,
-                            confirmationDelay: .zero)
+                            confirmationDelay: delay)
     }
 
     private func snap(_ ip: String?, _ vpn: VPNState.Mode) -> NetworkSnapshot {
@@ -147,5 +147,49 @@ struct ConfirmationTests {
         // The baseline advances after posting, so a state that has already
         // been announced is not announced again on every later refresh.
         #expect(await spy.changes.count == 1)
+    }
+
+    // MARK: - The real Task-based window
+
+    // A zero delay takes the synchronous branch in `noteChanges`, which never
+    // assigns `confirmationTask` at all. These three run with a real, if
+    // short, delay so the scheduled `Task` actually executes and the guards
+    // that only matter while it is in flight get exercised.
+
+    @Test("a change posts after the delay, not before")
+    func postsAfterDelayNotBefore() async {
+        let spy = SpyNotifier()
+        let model = self.model(notifier: spy, delay: .milliseconds(50))
+        await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .full))
+        await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .off))
+        #expect(await spy.changes.isEmpty)
+
+        try? await Task.sleep(for: .milliseconds(150))
+        #expect(await spy.changes == [.vpnWeakened(from: .full, to: .off)])
+    }
+
+    @Test("a second change mid-window does not open a second window or double-post")
+    func secondChangeMidWindowDoesNotDoublePost() async {
+        let spy = SpyNotifier()
+        let model = self.model(notifier: spy, delay: .milliseconds(50))
+        await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .full))
+        await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .off))
+        // Still inside the first window: this must not start a second one.
+        await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .split))
+
+        try? await Task.sleep(for: .milliseconds(150))
+        #expect(await spy.changes.count == 1)
+    }
+
+    @Test("a toggle switched off mid-window suppresses its notification")
+    func toggleOffMidWindowSuppressesNotification() async {
+        let spy = SpyNotifier()
+        let model = self.model(notifier: spy, delay: .milliseconds(50))
+        await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .full))
+        await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .off))
+        model.preferencesForTesting.notifyOnVPNWeakened = false
+
+        try? await Task.sleep(for: .milliseconds(150))
+        #expect(await spy.changes.isEmpty)
     }
 }
