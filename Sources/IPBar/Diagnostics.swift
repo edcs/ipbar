@@ -16,6 +16,23 @@ enum Diagnostics {
         let networkKey = GatewayScanner.current(interfaces: interfaces)
         print("Network            \(networkKey?.gateway ?? "none")")
         print("                   \(networkKey?.descriptor ?? "no gateway — cellular, tethered, or offline")")
+
+        let semaphore2 = DispatchSemaphore(value: 0)
+        nonisolated(unsafe) var authorization: NotifierAuthorization = .unavailable
+        Task {
+            authorization = await SystemNotifier().authorizationStatus()
+            semaphore2.signal()
+        }
+        _ = semaphore2.wait(timeout: .now() + 5)
+
+        let (notifyVPN, notifyIP, labels) = MainActor.assumeIsolated {
+            let prefs = Preferences()
+            return (prefs.notifyOnVPNWeakened, prefs.notifyOnPublicIPChange, prefs.labels)
+        }
+
+        print("Notifications      permission: \(authorization)")
+        print("                   VPN weakened: \(notifyVPN)")
+        print("                   IP changed:   \(notifyIP)")
         print("")
         print("Interfaces")
         for interface in interfaces.sorted(by: { $0.bsdName < $1.bsdName }) {
@@ -47,7 +64,6 @@ enum Diagnostics {
         print("                   IPv6: \(v6?.address ?? "none")")
         print("                Country: \(v4?.country ?? v6?.country ?? "unknown")")
 
-        let labels = MainActor.assumeIsolated { Preferences().labels }
         print("")
         print("Labels (\(labels.count))")
         for label in labels {
