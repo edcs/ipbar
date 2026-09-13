@@ -135,6 +135,52 @@ tunnel interface. Nothing is special-cased.
 To see everything the menu bar is derived from, run `IPBar --diagnose`. It's useful in bug
 reports, and you can compare it against `scutil --nwi`.
 
+## Being told when something changes
+
+Two things can interrupt you, and both are off until you turn them on in Settings. Turning
+the first one on is the only time IPBar has ever asked you for anything.
+
+**Your VPN stopped covering your traffic.** Not only when it disconnects. If you are on a
+full tunnel with a mesh VPN also up and the full tunnel dies, IPBar still sees a tunnel and
+still says "some traffic through a VPN" — while your general traffic has started leaving in
+the clear. That is the most dangerous state it can observe, so it is the one worth saying
+out loud. The rule is that the tunnel now covers less than it did:
+
+| Announced | Silent |
+| --- | --- |
+| all traffic → none | none → any |
+| all traffic → some | some → all |
+| some traffic → none | no change |
+
+Connecting a VPN is never announced. You did that.
+
+**Your public IP changed.** Useful behind an allowlist, or with a dynamic-DNS record. If the
+new address has a name, the notification uses it.
+
+Losing the internet is not an address changing, so it is not announced — the struck-through
+globe already says it. Coming back on a *different* address is, though, so leaving the house
+and reconnecting elsewhere tells you.
+
+### Why it waits ten seconds
+
+VPN clients reconnect: on wake, on a network change, on a server hiccup. IPBar sees the
+tunnel vanish and return within seconds, and announcing that blip would be crying wolf.
+Three false alarms and you would turn the feature off, which is exactly when it stops
+protecting you.
+
+So a change is held for ten seconds and measured again before it is announced. A blip that
+heals itself never reaches you. A tunnel that drops and half-recovers is announced as what it
+actually is rather than what it first looked like.
+
+### If you say no
+
+Deny the permission and the toggle goes back off, and Settings says notifications are turned
+off for IPBar with a button to open System Settings. It will not sit there switched on while
+quietly doing nothing — that would be the same fault as a menu bar showing a local address as
+though the internet were fine.
+
+`IPBar --diagnose` prints the permission state and both toggles.
+
 ## When the internet can't be reached
 
 Being on a network and having internet are different things, and IPBar says which one you
@@ -221,6 +267,8 @@ Sources live in `Sources/IPBar/`.
 | `AddressLabel.swift` | the name to address mapping, and how a match is chosen |
 | `NetworkInterface.swift` | `getifaddrs` scan, decorated via SystemConfiguration |
 | `VPNState.swift` | tunnel inference described above |
+| `NetworkChange.swift` | which transitions are worth announcing |
+| `Notifier.swift` | notifications, behind a bundle-identifier guard |
 | `Gateway.swift` | the gateway MAC that identifies a network |
 | `PublicIPService.swift` | family-pinned public IP lookup with fallbacks |
 | `NetworkModel.swift` | observable state, refreshed by `NWPathMonitor` |
