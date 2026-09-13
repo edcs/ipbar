@@ -137,8 +137,10 @@ IPv4 behaves differently only because NAT sits in the way, translating a private
 ## The country flag
 
 The flag comes from the same Cloudflare response IPBar already uses to find your public
-address, so it costs no extra request and adds no other third party. If Cloudflare can't
-place the address, the flag is simply left out.
+address, so it costs no extra request and adds no other third party. Some networks intercept
+the well-known `1.1.1.1` address, so IPBar tries the same Cloudflare service by hostname
+before falling back to an endpoint that reports an address alone. If nothing can place the
+address, the flag is simply left out.
 
 Flags are flat SVGs, rendered as vectors so they stay sharp at any size.
 
