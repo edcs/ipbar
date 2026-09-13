@@ -177,7 +177,9 @@ actually is rather than what it first looked like.
 Deny the permission and the toggle goes back off, and Settings says notifications are turned
 off for IPBar with a button to open System Settings. It will not sit there switched on while
 quietly doing nothing — that would be the same fault as a menu bar showing a local address as
-though the internet were fine.
+though the internet were fine. Revoke the permission later, in System Settings rather than at
+the prompt, and the same thing happens the next time you open IPBar's Settings: both toggles
+switch themselves off, with the same message explaining why.
 
 `IPBar --diagnose` prints the permission state and both toggles.
 
