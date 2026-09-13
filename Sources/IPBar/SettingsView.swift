@@ -38,26 +38,48 @@ struct SettingsView: View {
 
     private var names: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Give an address or range a name. IPBar shows the name in place of the address — useful for a static IP you recognise.")
+            Text("""
+                 Give an address or range a name. IPBar shows the name in place of the \
+                 address — useful for a static IP you recognise. Networks are named from \
+                 the panel, since a gateway can only be read while you are on it.
+                 """)
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             Table(of: Binding<AddressLabel>.self) {
-                TableColumn("Address or CIDR") { $label in
-                    TextField("203.0.113.42", text: $label.pattern)
-                        .textFieldStyle(.plain)
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(label.prefix == nil ? Color.red : Color.primary)
+                TableColumn("Address, block or network") { $label in
+                    if label.isNetwork {
+                        // Captured when the network was named, not typed. A bare
+                        // MAC is not something anyone can check, so the row shows
+                        // where it was seen instead; --diagnose prints the key.
+                        Text(label.descriptor ?? "Network")
+                            .font(.system(.body, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        TextField("203.0.113.42", text: $label.patternText)
+                            .textFieldStyle(.plain)
+                            .font(.system(.body, design: .monospaced))
+                            .foregroundStyle(label.isValid || label.name.isEmpty
+                                             ? Color.primary : Color.red)
+                    }
                 }
                 TableColumn("Name") { $label in
                     TextField("Office", text: $label.name).textFieldStyle(.plain)
                 }
                 TableColumn("Applies to") { $label in
-                    Picker("", selection: $label.scope) {
-                        ForEach(AddressLabel.Scope.allCases, id: \.self) { Text($0.title).tag($0) }
+                    if label.isNetwork {
+                        // A network name describes neither address, so it applies
+                        // wherever and the choice would be a lie.
+                        Text("—").foregroundStyle(.secondary)
+                    } else {
+                        Picker("", selection: $label.scope) {
+                            ForEach(AddressLabel.Scope.allCases, id: \.self) {
+                                Text($0.title).tag($0)
+                            }
+                        }
+                        .labelsHidden()
                     }
-                    .labelsHidden()
                 }
             } rows: {
                 ForEach($preferences.labels) { TableRow($0) }
