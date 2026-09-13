@@ -179,3 +179,37 @@ enum GatewayScanner {
             : MemoryLayout<UInt32>.size
     }
 }
+
+/// What the network is reached *through*, as opposed to what this Mac holds.
+struct NetworkFacts: Hashable, Sendable {
+    let router: String?
+    let dns: [String]
+}
+
+extension GatewayScanner {
+    /// The router and the resolvers currently in use.
+    ///
+    /// The two deliberately come from different places, and the inconsistency
+    /// is the point rather than an oversight. The router is the one on the
+    /// primary *physical* interface: under a VPN the default route points at a
+    /// point-to-point tunnel address, which answers "which router am I on"
+    /// with something true but useless. DNS is the *global* resolver list,
+    /// which under a VPN is the VPN's — and that is the honest answer to "what
+    /// is resolving my names". They are answers to different questions.
+    static func facts(interfaces: [NetworkInterface]) -> NetworkFacts {
+        let physical = Set(interfaces.filter { $0.kind.isPhysical }.map(\.bsdName))
+        let router = GatewaySelection.choose(candidates: routerCandidates(),
+                                             physicalInterfaces: physical,
+                                             serviceOrder: serviceOrder())?.router
+        return NetworkFacts(router: router, dns: globalDNS())
+    }
+
+    /// Every resolver, in the order macOS consults them.
+    static func globalDNS() -> [String] {
+        guard let store = SCDynamicStoreCreate(nil, "IPBar.dns" as CFString, nil, nil),
+              let dict = SCDynamicStoreCopyValue(
+                store, "State:/Network/Global/DNS" as CFString) as? [String: Any],
+              let servers = dict["ServerAddresses"] as? [String] else { return [] }
+        return servers
+    }
+}
