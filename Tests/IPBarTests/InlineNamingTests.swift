@@ -11,7 +11,7 @@ struct InlineNamingTests {
 
         #expect(labels.count == 1)
         #expect(labels.name(for: "203.0.113.42", scope: .publicAddress) == "Office")
-        #expect(labels.first?.pattern == "203.0.113.42")
+        #expect(labels.first?.key == .prefix("203.0.113.42"))
     }
 
     @Test("renaming updates in place rather than piling up duplicates")

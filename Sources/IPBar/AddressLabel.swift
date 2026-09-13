@@ -51,12 +51,6 @@ struct AddressLabel: Codable, Identifiable, Hashable, Sendable {
         return nil
     }
 
-    /// Backwards compatibility: forwards to `patternText`.
-    var pattern: String {
-        get { patternText }
-        set { patternText = newValue }
-    }
-
     /// Binding shim for the Settings table, which edits a plain `String`.
     /// Writes are dropped for network labels, whose key is captured rather
     /// than typed.
