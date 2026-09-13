@@ -65,9 +65,11 @@ click **Name network**, or right-click any local address and choose **Name This 
 The name then follows you to that network whatever address it hands out.
 
 A network is identified by the MAC address of its gateway. That stays put while the address
-behind it rotates, and it is the same across every satellite of a mesh network, so "Home"
-does not stop matching in the back bedroom. It also needs no permission to read — an SSID
-has required Location Services since macOS 14, and IPBar asks you for nothing.
+behind it rotates, and — for the common bridge-mode setup, where every satellite shares one
+gateway — it is the same across every satellite of a mesh network, so "Home" does not stop
+matching in the back bedroom. (Routed-mode mesh gives each satellite its own gateway instead,
+so there the name is per-satellite.) It also needs no permission to read — an SSID has
+required Location Services since macOS 14, and IPBar asks you for nothing.
 
 Naming is only available where there is a gateway to read. Cellular and tethered links are
 point-to-point and have no ARP table, so the option does not appear there.
