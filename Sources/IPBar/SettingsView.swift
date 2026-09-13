@@ -1,8 +1,12 @@
+import AppKit
 import SwiftUI
 
 struct SettingsView: View {
     @Bindable var model: NetworkModel
     @Bindable var preferences: Preferences
+
+    @State private var authorization: NotifierAuthorization = .notDetermined
+    private let notifier: Notifier = SystemNotifier()
 
     var body: some View {
         TabView {
@@ -10,6 +14,33 @@ struct SettingsView: View {
             names.tabItem { Label("Names", systemImage: "tag") }
         }
         .frame(width: 460, height: 380)
+        .task {
+            // Read on every open, so permission revoked in System Settings
+            // since last time shows up here rather than leaving a toggle
+            // quietly doing nothing.
+            authorization = await notifier.authorizationStatus()
+        }
+    }
+
+    /// Turning a toggle on is the only thing that ever asks for permission.
+    ///
+    /// A denial puts the toggle back rather than leaving it on and silent —
+    /// a switch that claims to be doing something it cannot do is the same
+    /// fault as a menu bar that shows a local address as though the internet
+    /// were fine.
+    private func requestPermissionIfNeeded(turnedOn: Bool,
+                                           revert: @escaping @MainActor () -> Void) {
+        guard turnedOn else { return }
+        Task { @MainActor in
+            let status = await notifier.authorizationStatus()
+            guard status != .authorized else {
+                authorization = status
+                return
+            }
+            let granted = await notifier.requestAuthorization()
+            authorization = await notifier.authorizationStatus()
+            if !granted { revert() }
+        }
     }
 
     private var general: some View {
@@ -29,6 +60,35 @@ struct SettingsView: View {
             .help("Only affects the menu bar. The panel always shows both.")
             Picker("Refresh every", selection: $preferences.refreshMinutes) {
                 ForEach([1, 5, 10, 30, 60], id: \.self) { Text("\($0) min").tag($0) }
+            }
+            Divider()
+            Toggle("Notify me when my VPN drops", isOn: $preferences.notifyOnVPNWeakened)
+                .help("Also when a full tunnel degrades to a partial one, which leaves some traffic in the clear without disconnecting")
+                .onChange(of: preferences.notifyOnVPNWeakened) { _, new in
+                    requestPermissionIfNeeded(turnedOn: new) {
+                        preferences.notifyOnVPNWeakened = false
+                    }
+                }
+            Toggle("Notify me when my public IP changes", isOn: $preferences.notifyOnPublicIPChange)
+                .onChange(of: preferences.notifyOnPublicIPChange) { _, new in
+                    requestPermissionIfNeeded(turnedOn: new) {
+                        preferences.notifyOnPublicIPChange = false
+                    }
+                }
+
+            if authorization == .denied {
+                HStack {
+                    Text("Notifications are turned off for IPBar in System Settings.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Open") {
+                        guard let url = URL(string:
+                            "x-apple.systempreferences:com.apple.preference.notifications")
+                        else { return }
+                        NSWorkspace.shared.open(url)
+                    }
+                }
             }
             Divider()
             Toggle("Launch at login", isOn: $preferences.launchAtLogin)
