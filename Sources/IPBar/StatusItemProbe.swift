@@ -34,12 +34,26 @@ enum StatusItemProbe {
     /// `IPBAR_PROBE=panel IPBAR_PANEL_OUT=/tmp/panel.png IPBar`
     private static func renderPanel() {
         Task { @MainActor in
-            let preferences = Preferences()
+            let isSample = ProcessInfo.processInfo.environment["IPBAR_PANEL_SAMPLE"] == "1"
+
+            // Sample runs get a scratch defaults domain of their own. Setting
+            // a preference persists it, so rendering against the real domain
+            // overwrote the names of whoever ran `make screenshots` — with the
+            // sample ones, irrecoverably.
+            let preferences: Preferences
+            if isSample {
+                let suite = "dev.ecs.IPBar.screenshots"
+                let defaults = UserDefaults(suiteName: suite)!
+                defaults.removePersistentDomain(forName: suite)
+                preferences = Preferences(defaults: defaults)
+            } else {
+                preferences = Preferences()
+            }
             let model = NetworkModel(preferences: preferences)
 
             // Screenshots run on made-up addresses. A README is public, and the
             // person generating one should not have to publish where they live.
-            if ProcessInfo.processInfo.environment["IPBAR_PANEL_SAMPLE"] == "1" {
+            if isSample {
                 model.loadSampleData()
                 preferences.labels = [AddressLabel(pattern: "203.0.113.42", name: "Home",
                                                    scope: .publicAddress)]
