@@ -335,6 +335,24 @@ final class NetworkModel {
         await noteChanges(current: snapshot, rescan: false)
     }
 
+    /// Closes a pending confirmation window immediately, running the same
+    /// close path the timer would have run at expiry (`rescan: false`,
+    /// reading `latestObserved`). Used by tests only.
+    ///
+    /// Ordering tests build the model with a delay so long it cannot expire
+    /// during the test, so the window opens for real and mid-window calls are
+    /// genuinely refused — then call this instead of racing the clock to make
+    /// it close. Cancel-then-await lets the scheduled task's own `defer` run
+    /// and clear `confirmationTask` before `confirm` runs, so a window opened
+    /// afterwards can't have its handle wiped out by the old task settling late.
+    func closeConfirmationWindowForTesting() async {
+        if let task = confirmationTask {
+            task.cancel()
+            await task.value
+        }
+        await confirm(rescan: false)
+    }
+
     /// Used by tests only, to install labels the notification wording reads.
     var preferencesForTesting: Preferences { preferences }
 

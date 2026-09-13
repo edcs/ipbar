@@ -141,33 +141,39 @@ struct ConfirmationTests {
     // MARK: - The real Task-based window
 
     // A zero delay takes the synchronous branch in `noteChanges`, which never
-    // assigns `confirmationTask` at all. The tests below run with a real, if
-    // short, delay so the scheduled `Task` actually executes and `confirm`
-    // re-measures at close rather than replaying the snapshot the window
-    // opened on.
+    // assigns `confirmationTask` at all. The tests below need the scheduled
+    // `Task` to actually exist so `confirm` re-measures at close rather than
+    // replaying the snapshot the window opened on — but only one of them
+    // needs to prove the *timer itself* fires unattended. That one keeps a
+    // real, generously-margined delay. The rest are about ordering, not
+    // timing: they use a delay long enough that it cannot elapse during the
+    // test (so mid-window calls are genuinely refused rather than racing to
+    // land before an accidental close) and then close the window explicitly
+    // via `closeConfirmationWindowForTesting`, so nothing here races the
+    // wall clock.
 
     @Test("a change posts after the delay, not before")
     func postsAfterDelayNotBefore() async {
         let spy = SpyNotifier()
-        let model = self.model(notifier: spy, delay: .milliseconds(50))
+        let model = self.model(notifier: spy, delay: .milliseconds(500))
         await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .full))
         await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .off))
         #expect(await spy.changes.isEmpty)
 
-        try? await Task.sleep(for: .milliseconds(150))
+        try? await Task.sleep(for: .seconds(1))
         #expect(await spy.changes == [.vpnWeakened(from: .full, to: .off)])
     }
 
     @Test("a second change mid-window does not open a second window or double-post")
     func secondChangeMidWindowDoesNotDoublePost() async {
         let spy = SpyNotifier()
-        let model = self.model(notifier: spy, delay: .milliseconds(50))
+        let model = self.model(notifier: spy, delay: .seconds(60))
         await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .full))
         await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .off))
         // Still inside the first window: this must not start a second one.
         await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .split))
 
-        try? await Task.sleep(for: .milliseconds(150))
+        await model.closeConfirmationWindowForTesting()
         // Not just one post — the *right* one: the window must re-measure at
         // close and report the split it was last actually given, not the
         // stale off it opened on.
@@ -183,12 +189,12 @@ struct ConfirmationTests {
         // this posts "VPN disconnected": the exact false alarm the
         // confirmation window exists to prevent.
         let spy = SpyNotifier()
-        let model = self.model(notifier: spy, delay: .milliseconds(50))
+        let model = self.model(notifier: spy, delay: .seconds(60))
         await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .full))
         await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .off))
         await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .full))
 
-        try? await Task.sleep(for: .milliseconds(150))
+        await model.closeConfirmationWindowForTesting()
         #expect(await spy.changes.isEmpty)
     }
 
@@ -198,24 +204,24 @@ struct ConfirmationTests {
         // arrives. Close must report full → split, not the stale full → off
         // first seen when the window opened.
         let spy = SpyNotifier()
-        let model = self.model(notifier: spy, delay: .milliseconds(50))
+        let model = self.model(notifier: spy, delay: .seconds(60))
         await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .full))
         await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .off))
         await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .split))
 
-        try? await Task.sleep(for: .milliseconds(150))
+        await model.closeConfirmationWindowForTesting()
         #expect(await spy.changes == [.vpnWeakened(from: .full, to: .split)])
     }
 
     @Test("a toggle switched off mid-window suppresses its notification")
     func toggleOffMidWindowSuppressesNotification() async {
         let spy = SpyNotifier()
-        let model = self.model(notifier: spy, delay: .milliseconds(50))
+        let model = self.model(notifier: spy, delay: .seconds(60))
         await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .full))
         await model.noteChangesForTesting(snapshot: snap("203.0.113.41", .off))
         model.preferencesForTesting.notifyOnVPNWeakened = false
 
-        try? await Task.sleep(for: .milliseconds(150))
+        await model.closeConfirmationWindowForTesting()
         #expect(await spy.changes.isEmpty)
     }
 }
