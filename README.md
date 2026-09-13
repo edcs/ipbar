@@ -55,6 +55,36 @@ done. You never have to read the address off the screen and type it back in.
 Right-click also offers **Rename** and **Remove Name**. Remove Name only appears when the
 address has its own name, since a name inherited from a wider block belongs to that block.
 
+## Naming a network
+
+A name tied to an address only holds while the address does. If your ISP rotates yours,
+every name you set decays into a stale entry matching nothing.
+
+So a name can attach to the network instead. Hover the **This Mac** header in the panel and
+click **Name network**, or right-click any local address and choose **Name This Network…**.
+The name then follows you to that network whatever address it hands out.
+
+A network is identified by the MAC address of its gateway. That stays put while the address
+behind it rotates, and it is the same across every satellite of a mesh network, so "Home"
+does not stop matching in the back bedroom. It also needs no permission to read — an SSID
+has required Location Services since macOS 14, and IPBar asks you for nothing.
+
+Naming is only available where there is a gateway to read. Cellular and tethered links are
+point-to-point and have no ARP table, so the option does not appear there.
+
+When a network name and an address label both match, the most specific still wins:
+
+| Wins over | Kind |
+| --- | --- |
+| everything | an exact address, `203.0.113.42` |
+| every block | the network you are on |
+| narrower blocks only | a block, `203.0.113.0/24` |
+
+Networks are named from the panel rather than Settings, because a gateway can only be read
+while you are standing on it. Settings shows the network by where it was last seen —
+`Wi-Fi · router 192.168.1.1` — since a bare MAC address is not something anyone can check.
+`IPBar --diagnose` prints the key itself.
+
 Naming in the panel is limited to public addresses for now, because an IPv6 address appears
 in both sections at once (see below) and naming it in each would give one address two
 names. Local addresses can still be named in Settings.
@@ -189,6 +219,7 @@ Sources live in `Sources/IPBar/`.
 | `AddressLabel.swift` | the name to address mapping, and how a match is chosen |
 | `NetworkInterface.swift` | `getifaddrs` scan, decorated via SystemConfiguration |
 | `VPNState.swift` | tunnel inference described above |
+| `Gateway.swift` | the gateway MAC that identifies a network |
 | `PublicIPService.swift` | family-pinned public IP lookup with fallbacks |
 | `NetworkModel.swift` | observable state, refreshed by `NWPathMonitor` |
 | `Preferences.swift` | settings and stored names, backed by `UserDefaults` |

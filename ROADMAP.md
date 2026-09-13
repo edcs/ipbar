@@ -27,42 +27,16 @@ The gaps below are not bugs. They're the next honest things to say.
 
 ---
 
-## Next — name networks, not addresses
+## Done — name networks, not addresses
 
-**The README's first sentence excludes most of its readers.** It opens with *"If you have a
-static IP"*, and `AddressLabel` can only match on an address or a CIDR block. If your ISP
-rotates your address, every name you set decays into a lie: you are "Home" one week and
-bare digits the next, with a stale `/32` in Settings quietly matching nothing.
+Shipped. The key is the gateway MAC of the primary **physical** interface — never the
+default route, which a full-tunnel VPN displaces onto a tunnel whose gateway has no ARP
+entry at all. `ServiceOrder` breaks the tie when Wi-Fi and Ethernet are both up.
 
-The fix is to widen what a label can match. Today `AddressLabel.pattern` is parsed by
-`IPPrefix`; the type needs a second kind of key so a name can attach to *the network* rather
-than to the number it happened to hand out.
+Design decisions and the spike that settled the mechanics are in
+[the design doc](docs/superpowers/specs/2026-09-13-name-networks-design.md).
 
-The candidate key is the **default gateway's MAC address**. It is stable per network, it
-distinguishes your home router from a café's, and — the part that matters —
-`SCDynamicStoreCopyValue` on `State:/Network/Global/IPv4` is a call `InterfaceScanner`
-already makes, and the dictionary it returns carries `Router` alongside the
-`PrimaryInterface` we read today. From that address the link layer table gives the MAC. No
-new framework, no new permission, no new third party.
-
-**SSID is the obvious alternative and should be rejected.** It reads better in Settings, but
-since macOS 14 `CWInterface.ssid` returns `nil` unless the app holds Location Services
-authorisation. An app that advertises no analytics asking for your location, to save typing
-a name once, is a bad trade. Gateway MAC gets most of the value at none of the cost.
-
-Open design questions:
-
-- How does a gateway-matched name interact with the longest-prefix rule? A network key has
-  no prefix length. Probably it sits above every CIDR match, since it is more specific than
-  any of them, but that needs stating rather than assuming.
-- The Settings table has one **Address or CIDR** column. Does it gain a kind column, or does
-  the pattern field learn a second syntax?
-- Naming from the panel is the good path — you never read an address off screen and type it
-  back. What does "name this network" look like as a row?
-
-This is the entry that changes who the app is for. Everything below is smaller.
-
-## Then — say when something changes
+## Next — say when something changes
 
 `NetworkModel` computes three facts and throws two of them away on every refresh. It knows
 the previous `publicIPv4`, and it overwrites it. It knows the previous `VPNState`, and it
@@ -88,7 +62,7 @@ prompts for permission, and IPBar currently asks for nothing at all. Ways to spe
 
 The VPN case probably justifies the prompt. The IP-change case probably doesn't on its own.
 
-## After that — finish the reachability story
+## Then — finish the reachability story
 
 Three small things, each completing a sentence the app already starts.
 
