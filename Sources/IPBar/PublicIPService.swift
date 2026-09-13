@@ -21,8 +21,14 @@ actor PublicIPService {
         let isTrace: Bool
     }
 
+    /// The literal IP stays first: it pins the stack with no DNS in the way.
+    /// It is also the address networks most like to intercept — in Doha the
+    /// handshake to 1.1.1.1 succeeded but the exchange never completed — so the
+    /// same service by hostname follows it. Only then ipify, which reports an
+    /// address and no country: reaching it means the flag is already lost.
     private static let ipv4: [Endpoint] = [
         Endpoint(url: URL(string: "https://1.1.1.1/cdn-cgi/trace")!, isTrace: true),
+        Endpoint(url: URL(string: "https://www.cloudflare.com/cdn-cgi/trace")!, isTrace: true),
         Endpoint(url: URL(string: "https://api.ipify.org")!, isTrace: false)
     ]
 
@@ -33,21 +39,41 @@ actor PublicIPService {
 
     private let session: URLSession
 
-    init() {
+    /// How the app talks to these endpoints. Separated from `init` so a test
+    /// can substitute a configuration carrying a stub `URLProtocol`, and
+    /// exercise the real fallback order against the real endpoint list without
+    /// depending on the network it happens to be running on.
+    static func defaultConfiguration() -> URLSessionConfiguration {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         configuration.timeoutIntervalForRequest = 8
         configuration.waitsForConnectivity = false
+        return configuration
+    }
+
+    init(configuration: URLSessionConfiguration = PublicIPService.defaultConfiguration()) {
         session = URLSession(configuration: configuration)
     }
 
     func fetch(_ family: NetworkInterface.Family) async -> Result? {
         for endpoint in family == .ipv4 ? Self.ipv4 : Self.ipv6 {
-            if let result = try? await query(endpoint), IPPrefix(result.address) != nil {
+            if let result = try? await query(endpoint), Self.address(result.address, is: family) {
                 return result
             }
         }
         return nil
+    }
+
+    /// Whether an answer came back on the stack it was asked about.
+    ///
+    /// A literal-IP endpoint can only reply on its own stack, but a hostname
+    /// resolves to both and Happy Eyeballs picks one, so the reply has to be
+    /// checked rather than assumed. Without this an address reached over IPv6
+    /// could be reported as the IPv4 one, which is the very confusion the
+    /// separate endpoint lists exist to prevent.
+    private static func address(_ text: String, is family: NetworkInterface.Family) -> Bool {
+        guard let parsed = IPPrefix(text) else { return false }
+        return parsed.family == (family == .ipv4 ? AF_INET : AF_INET6)
     }
 
     private func query(_ endpoint: Endpoint) async throws -> Result? {
