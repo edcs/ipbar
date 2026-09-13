@@ -192,7 +192,7 @@ the address.
 ```sh
 make hooks           # enable the commit-message hook, once per clone
 swift build          # compile
-swift test           # 75 tests, no network needed
+swift test           # no network needed
 make icon            # redraw the icon and compile the .icns
 make app             # universal .app in dist/
 make run             # build and launch
@@ -299,5 +299,5 @@ it to the tap.
 MIT. © 2026 ECS Software Consulting Ltd.
 
 Flag artwork is [flag-icons](https://github.com/lipis/flag-icons) by Panayiotis Lipiridis,
-used under the MIT licence. The 257 country flags are vendored in `Resources/Flags/`, with
+used under the MIT licence. The country flags are vendored in `Resources/Flags/`, with
 the licence alongside them.
