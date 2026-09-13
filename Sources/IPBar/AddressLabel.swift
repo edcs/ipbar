@@ -97,33 +97,58 @@ extension AddressLabel {
 }
 
 extension Array where Element == AddressLabel {
-    /// Names one exact address, as the panel does when you rename in place.
+    /// Names one entry, as the panel does when you rename in place.
     ///
-    /// An existing label for the same address and scope is updated rather than
-    /// duplicated, and clearing the name removes it entirely, so repeated
-    /// renaming cannot silently pile up dead entries.
-    mutating func setName(_ name: String, for address: String, scope: AddressLabel.Scope) {
+    /// An existing entry with the same identity is updated rather than
+    /// duplicated, and clearing the name removes it, so repeated renaming
+    /// cannot silently pile up dead labels.
+    mutating func setName(_ name: String, forKey key: AddressLabel.Key,
+                          scope: AddressLabel.Scope) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let probe = AddressLabel(key: key, name: "", scope: scope)
 
-        if let index = firstIndex(where: { $0.identity == AddressLabel(pattern: address, name: "", scope: scope).identity }) {
+        if let index = firstIndex(where: { $0.identity == probe.identity }) {
             if trimmed.isEmpty {
                 remove(at: index)
             } else {
                 self[index].name = trimmed
+                // Refresh the captured descriptor so a renamed network shows
+                // where it was last seen rather than where it was first named.
+                self[index].key = key
             }
         } else if !trimmed.isEmpty {
-            append(AddressLabel(pattern: address, name: trimmed, scope: scope))
+            append(AddressLabel(key: key, name: trimmed, scope: scope))
         }
     }
 
-    /// Whether this exact address carries its own label. A name inherited from
-    /// a wider block belongs to that block, not to this address.
+    mutating func setName(_ name: String, for address: String, scope: AddressLabel.Scope) {
+        setName(name, forKey: .prefix(address), scope: scope)
+    }
+
+    /// Names the network this Mac is currently attached to.
+    mutating func setNetworkName(_ name: String, for key: NetworkKey) {
+        setName(name, forKey: .network(gateway: key.gateway, descriptor: key.descriptor),
+                scope: .any)
+    }
+
+    /// Whether this exact entry carries its own label. A name inherited from a
+    /// wider block belongs to that block, not to this address.
+    func hasOwnLabel(forKey key: AddressLabel.Key, scope: AddressLabel.Scope) -> Bool {
+        let probe = AddressLabel(key: key, name: "", scope: scope)
+        return contains { $0.identity == probe.identity }
+    }
+
     func hasOwnLabel(for address: String, scope: AddressLabel.Scope) -> Bool {
-        contains { $0.identity == AddressLabel(pattern: address, name: "", scope: scope).identity }
+        hasOwnLabel(forKey: .prefix(address), scope: scope)
+    }
+
+    mutating func removeLabel(forKey key: AddressLabel.Key, scope: AddressLabel.Scope) {
+        let probe = AddressLabel(key: key, name: "", scope: scope)
+        removeAll { $0.identity == probe.identity }
     }
 
     mutating func removeLabel(for address: String, scope: AddressLabel.Scope) {
-        removeAll { $0.identity == AddressLabel(pattern: address, name: "", scope: scope).identity }
+        removeLabel(forKey: .prefix(address), scope: scope)
     }
 
     /// Returns the name for `address`, preferring the most specific match.
