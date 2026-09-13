@@ -14,14 +14,21 @@ final class NetworkModel {
     private(set) var lastUpdated: Date?
     private(set) var isRefreshing = false
 
+    /// The network this Mac is on, read after the public IP fetch so the
+    /// gateway's ARP entry is populated by the traffic that lookup generates.
+    private(set) var networkKey: NetworkKey?
+
     private let preferences: Preferences
     private let publicIP = PublicIPService()
     private let monitor = NWPathMonitor()
+    private let gateway: @Sendable ([NetworkInterface]) -> NetworkKey?
     private var refreshTask: Task<Void, Never>?
     private var timerTask: Task<Void, Never>?
 
-    init(preferences: Preferences) {
+    init(preferences: Preferences,
+         gateway: @escaping @Sendable ([NetworkInterface]) -> NetworkKey? = GatewayScanner.current) {
         self.preferences = preferences
+        self.gateway = gateway
     }
 
     // MARK: - Display
@@ -92,7 +99,18 @@ final class NetworkModel {
     }
 
     func name(for address: String, scope: AddressLabel.Scope) -> String? {
-        preferences.labels.name(for: address, scope: scope)
+        preferences.labels.name(for: address, scope: scope, networkKey: networkKey)
+    }
+
+    /// The name of the network currently attached, for the panel's context row.
+    var networkName: String? {
+        guard let networkKey else { return nil }
+        let match = preferences.labels.first {
+            if case .network(let gateway, _) = $0.key { return gateway == networkKey.gateway }
+            return false
+        }
+        let trimmed = match?.name.trimmingCharacters(in: .whitespaces)
+        return (trimmed?.isEmpty == false) ? trimmed : nil
     }
 
     /// Applies a matching label, however the menu bar has been asked to show
@@ -118,6 +136,9 @@ final class NetworkModel {
         case .localAddress: return local ?? "No network"
         case .both:
             let parts = [local, remote].compactMap { $0 }
+            // A network name resolves for both halves, which would otherwise
+            // read "Home · Home".
+            if parts.count == 2, parts[0] == parts[1] { return parts[0] }
             return parts.isEmpty ? "No network" : parts.joined(separator: " · ")
         }
     }
@@ -244,5 +265,22 @@ final class NetworkModel {
         publicIPv6 = fetchedV6?.address
         country = fetchedV4?.country ?? fetchedV6?.country
         lastUpdated = Date()
+
+        // After the fetch, deliberately: the lookup routes through the gateway,
+        // which populates its ARP entry on a cold interface.
+        networkKey = gateway(scanned)
+    }
+
+    /// Sets the state the menu bar is derived from, without touching the
+    /// network. Used by tests only.
+    func applyForTesting(publicIPv4: String?, local: String?, key: NetworkKey?) {
+        interfaces = local.map {
+            [NetworkInterface(bsdName: "en0", address: $0, family: .ipv4,
+                              kind: .wifi, isLinkLocal: false, friendlyName: "Wi-Fi")]
+        } ?? []
+        self.publicIPv4 = publicIPv4
+        self.publicIPv6 = nil
+        self.networkKey = key
+        self.lastUpdated = Date()
     }
 }
