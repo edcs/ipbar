@@ -23,14 +23,17 @@ enum Diagnostics {
             authorization = await SystemNotifier().authorizationStatus()
             semaphore2.signal()
         }
-        _ = semaphore2.wait(timeout: .now() + 5)
+        // Distinct from the genuine `.unavailable` case (no bundle, answered
+        // instantly): a bug report needs to tell "there is no notification
+        // centre to ask" apart from "asking it never came back".
+        let timedOut = semaphore2.wait(timeout: .now() + 5) == .timedOut
 
         let (notifyVPN, notifyIP, labels) = MainActor.assumeIsolated {
             let prefs = Preferences()
             return (prefs.notifyOnVPNWeakened, prefs.notifyOnPublicIPChange, prefs.labels)
         }
 
-        print("Notifications      permission: \(authorization)")
+        print("Notifications      permission: \(timedOut ? "timed out" : "\(authorization)")")
         print("                   VPN weakened: \(notifyVPN)")
         print("                   IP changed:   \(notifyIP)")
         print("")
