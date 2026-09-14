@@ -311,6 +311,9 @@ final class NetworkModel {
         // free, and stalling the menu bar on IPC after wake is exactly what
         // the panel must not do.
         let observed = await currentFacts(for: scanned)
+        // Both reads above suspend, so a refresh superseded while they were in
+        // flight would otherwise write its stale answers over the newer ones.
+        guard !Task.isCancelled else { return }
         router = observed.router
         dnsServers = observed.dns
 

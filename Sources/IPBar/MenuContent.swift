@@ -20,9 +20,14 @@ struct MenuContent: View {
     /// genuinely your interface's address and your public one. Keying row state
     /// on the address alone made those two rows one row, so hovering either lit
     /// both and naming either turned both into editors.
+    ///
+    /// The same lesson applies again in "This Network": a home router is very
+    /// often its own resolver, so Router and DNS show one address on two rows.
+    /// `kind` is what keeps them separate.
     private struct RowKey: Hashable {
         let address: String
         let scope: AddressLabel.Scope
+        let kind: String
     }
 
     @State private var copied: RowKey?
@@ -285,7 +290,7 @@ struct MenuContent: View {
 
     private func row(kind: String, address: String,
                      scope: AddressLabel.Scope, heldBy: String? = nil) -> some View {
-        let key = RowKey(address: address, scope: scope)
+        let key = RowKey(address: address, scope: scope, kind: kind)
         return Group {
             if editing == key {
                 nameEditor(key: key)
