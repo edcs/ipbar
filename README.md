@@ -48,8 +48,8 @@ item. Your settings are stored under `dev.ecs.IPBar`.
 
 ## Naming an address
 
-The quickest way is from the panel itself. Hover a **public** address and click **Name**,
-or right-click it and choose **Name This Address**. Type the name, press Return, and you are
+The quickest way is from the panel itself. Hover any address and click **Name**, or
+right-click it and choose **Name This Address**. Type the name, press Return, and you are
 done. You never have to read the address off the screen and type it back in.
 
 Right-click also offers **Rename** and **Remove Name**. Remove Name only appears when the
@@ -87,9 +87,10 @@ while you are standing on it. Settings shows the network by where it was last se
 `Wi-Fi · router 192.168.1.1` — since a bare MAC address is not something anyone can check.
 `IPBar --diagnose` prints the key itself.
 
-Naming in the panel is limited to public addresses for now, because an IPv6 address appears
-in both sections at once (see below) and naming it in each would give one address two
-names. Local addresses can still be named in Settings.
+Any address in the panel can be named this way, local ones included. That was once limited
+to public addresses, because without NAT the same IPv6 sat in both sections at once and
+could have taken two different names — but an address that is also your public one is now
+listed only under **Public**, so the clash it guarded against cannot happen.
 
 For blocks and addresses you are not currently on, go to Settings → **Names** and click
 `+`. The pattern field accepts:
@@ -195,7 +196,13 @@ bar.
 
 The panel names the failure. No interfaces at all is "No network", and it tells you to turn
 Wi-Fi on or plug a cable in. On a network without internet, it says so and points at the
-usual cause, which is a sign-in page nobody has been shown yet.
+usual cause, which is a sign-in page nobody has been shown yet — and then offers to open it.
+
+**Open sign-in page** loads `captive.apple.com`, which is the probe macOS itself uses to
+decide whether a network really has internet. Whatever is intercepting the connection
+redirects it to its own portal, so IPBar needs no detection of its own and has nothing that
+goes stale when a portal moves. The button appears only where there is a network but no
+internet: with no network at all there is nothing to sign in to.
 
 The mark only appears once a lookup has finished and failed. While one is in flight the
 previous answer stands, so a slow check never flickers into looking like an outage.
@@ -213,6 +220,27 @@ keeps for privacy, is listed under **This Mac** as usual.
 
 IPv4 behaves differently only because NAT sits in the way, translating a private address like
 `192.168.1.77` into a public one, so the two are genuinely different addresses.
+
+## What you reach the internet through
+
+**This Network** lists the router this Mac talks through and every resolver it asks. They
+are facts about the network rather than about this Mac, which is why they sit in their own
+section rather than under **This Mac** — a router is the next hop, not an address you hold.
+Click either to copy it, like any other row. The section is absent when neither is known,
+since rows reading "unknown" are worse than no rows.
+
+The two come from deliberately different places, and the inconsistency is the point:
+
+- The **router** is the one on your primary *physical* interface. Under a VPN the default
+  route points at a point-to-point tunnel address, which is a true answer to "what is my
+  next hop" and a useless answer to "which router am I on".
+- The **DNS** servers are the ones macOS is actually consulting, which under a VPN are the
+  VPN's. That is the honest answer to "what is resolving my names".
+
+When a network has a name, its row now shows only the interface it was seen on. The router
+sits a few lines below in its own row, and saying it twice would read as a fault rather than
+as confirmation. Settings still shows the whole descriptor, where it is what lets you tell
+one stored network from another.
 
 ## The country flag
 

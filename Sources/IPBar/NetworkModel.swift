@@ -19,11 +19,17 @@ final class NetworkModel {
     /// waiting on the fetch; after, because the fetch's own traffic is what
     /// populates the gateway's ARP entry when the interface was cold.
     private(set) var networkKey: NetworkKey?
+    /// The router this Mac talks through, and the resolvers it asks. Facts
+    /// about the network rather than about this Mac, which is why the panel
+    /// gives them their own section.
+    private(set) var router: String?
+    private(set) var dnsServers: [String] = []
 
     private let preferences: Preferences
     private let publicIP = PublicIPService()
     private let monitor = NWPathMonitor()
     private let gateway: @Sendable ([NetworkInterface]) -> NetworkKey?
+    private let facts: @Sendable ([NetworkInterface]) -> NetworkFacts
     private var refreshTask: Task<Void, Never>?
     private var timerTask: Task<Void, Never>?
 
@@ -46,13 +52,24 @@ final class NetworkModel {
 
     init(preferences: Preferences,
          gateway: @escaping @Sendable ([NetworkInterface]) -> NetworkKey? = GatewayScanner.current,
+         facts: @escaping @Sendable ([NetworkInterface]) -> NetworkFacts = GatewayScanner.facts,
          notifier: Notifier = SystemNotifier(),
          confirmationDelay: Duration = .seconds(10)) {
         self.preferences = preferences
         self.gateway = gateway
+        self.facts = facts
         self.notifier = notifier
         self.confirmationDelay = confirmationDelay
     }
+
+    /// Whether offering to open a sign-in page would be a fix rather than a
+    /// guess: there is a network, but no internet beyond it.
+    ///
+    /// With no network at all there is nothing to sign in to, and the panel
+    /// already says to turn Wi-Fi on. `isOffline` stays false until a lookup
+    /// has actually finished and failed, so a slow first check cannot flash
+    /// a button that promises to fix something.
+    var canOpenSignInPage: Bool { isOffline && !localGroups.isEmpty }
 
     // MARK: - Display
 
@@ -226,6 +243,10 @@ final class NetworkModel {
         ]
         publicIPv4 = "203.0.113.42"
         publicIPv6 = "2001:db8:1738:0:870:ca09:920c:ef6c"
+        // Documentation addresses again, so the screenshots show the section
+        // without publishing whoever generated them.
+        router = "192.168.1.1"
+        dnsServers = ["192.168.1.1", "2001:db8:1738::1"]
         country = "GB"
         vpn = VPNState()
         lastUpdated = Date()
@@ -285,6 +306,17 @@ final class NetworkModel {
         // held back up to 8s waiting on a lookup it doesn't depend on.
         networkKey = await currentNetworkKey(for: scanned)
 
+        // Same trip as the gateway read above and off the main actor for the
+        // same reason: several SCDynamicStore round trips are cheap but not
+        // free, and stalling the menu bar on IPC after wake is exactly what
+        // the panel must not do.
+        let observed = await currentFacts(for: scanned)
+        // Both reads above suspend, so a refresh superseded while they were in
+        // flight would otherwise write its stale answers over the newer ones.
+        guard !Task.isCancelled else { return }
+        router = observed.router
+        dnsServers = observed.dns
+
         async let v4 = publicIP.fetch(.ipv4)
         async let v6 = publicIP.fetch(.ipv6)
         let (fetchedV4, fetchedV6) = await (v4, v6)
@@ -303,6 +335,12 @@ final class NetworkModel {
 
         await noteChanges(current: NetworkSnapshot(publicIP: primaryPublic, vpn: vpn.mode),
                           rescan: true)
+    }
+
+    /// Reads the router and resolvers off the main actor.
+    private func currentFacts(for scanned: [NetworkInterface]) async -> NetworkFacts {
+        let facts = self.facts
+        return await Task.detached { facts(scanned) }.value
     }
 
     /// Reads the gateway off the main actor.
@@ -351,6 +389,14 @@ final class NetworkModel {
             await task.value
         }
         await confirm(rescan: false)
+    }
+
+    /// Applies the injected network facts without touching the network.
+    /// Used by tests only.
+    func applyFactsForTesting() {
+        let observed = facts(interfaces)
+        router = observed.router
+        dnsServers = observed.dns
     }
 
     /// Used by tests only, to install labels the notification wording reads.

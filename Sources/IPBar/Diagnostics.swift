@@ -17,6 +17,11 @@ enum Diagnostics {
         print("Network            \(networkKey?.gateway ?? "none")")
         print("                   \(networkKey?.descriptor ?? "no gateway — cellular, tethered, or offline")")
 
+        // The panel shows these, so a report about a wrong one needs them.
+        let facts = GatewayScanner.facts(interfaces: interfaces)
+        print("                   router: \(facts.router ?? "none")")
+        print("                   dns:    \(facts.dns.isEmpty ? "none" : facts.dns.joined(separator: ", "))")
+
         let semaphore2 = DispatchSemaphore(value: 0)
         nonisolated(unsafe) var authorization: NotifierAuthorization = .unavailable
         Task {

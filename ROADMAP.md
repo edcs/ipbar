@@ -53,26 +53,20 @@ off.
 Design decisions and the spike that settled the mechanics are in
 [the design doc](docs/superpowers/specs/2026-09-13-change-notifications-design.md).
 
-## Next — finish the reachability story
+## Done — finish the reachability story
 
-Three small things, each completing a sentence the app already starts.
+Shipped. The panel offers to open a captive portal's sign-in page rather than only naming it
+as the likely cause, and a **This Network** section carries the router and every resolver.
 
-**The captive portal button.** The panel says the cause is *"a sign-in page nobody has been
-shown yet"* — and then leaves you to go and find it. Opening `http://captive.apple.com` in
-the default browser lands on the portal, because that is the probe macOS itself uses. One
-button, no new detection, and it turns a diagnosis into a fix.
+The router and DNS deliberately come from different places: the router from the primary
+physical interface, because under a VPN the default route points at a useless point-to-point
+address, and DNS from whatever macOS is actually consulting, which under a VPN is the VPN's.
 
-**Gateway and DNS in the panel.** Two things people look up constantly, and both fall out of
-`SCDynamicStore`: `Router` from the global IPv4 dictionary we already read, DNS from the
-service's `DNS` dictionary. An app about which addresses you have should probably know which
-one you talk *through*.
+Naming local addresses from the panel turned out to need no design at all. The deferral
+guarded against one IPv6 taking two names in two sections, and 663c778 had already stopped
+an address appearing in both.
 
-**Naming local addresses from the panel.** The deferral at `MenuContent.swift:177`. Without
-NAT an IPv6 address is the same string in both sections, so naming it in each would give one
-address two names. `RowKey` is already scoped, so the remaining work is deciding what the
-panel shows, not how it stores it.
-
-## Then — reach and polish
+## Next — reach and polish
 
 | | |
 | --- | --- |
